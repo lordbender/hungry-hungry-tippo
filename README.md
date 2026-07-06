@@ -46,6 +46,11 @@ When web search is applied, the API adds Claude's `web_search_20250305` server t
 forces one search before the final answer, returns citations in the response, and
 stores workflow metadata in `prompt_logs.metadata`.
 
+The exact orchestrated prompt envelope is stored in `prompt_logs.augmented_prompt`.
+For web-search responses, cited source URLs are also upserted into `rag_documents`
+and cited snippets are appended to `rag_chunks` with `embedding = null` until the
+embedding pipeline is added.
+
 Relevant environment settings:
 
 ```sh

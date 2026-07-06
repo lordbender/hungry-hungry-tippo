@@ -40,8 +40,9 @@ postgres
 4. `PromptWorkflowService` creates a pending prompt log.
 5. `PromptConductorService` plans how the prompt should be handled.
 6. `ClaudeService` calls Claude directly or with web search enabled.
-7. The prompt log is updated with the response, latency, token usage, and workflow metadata.
-8. The frontend displays the model response, workflow mode, search count, and citations.
+7. Web-search citations are persisted into the RAG tables as source documents and chunks.
+8. The prompt log is updated with the response, latency, token usage, and workflow metadata.
+9. The frontend displays the model response, workflow mode, search count, and citations.
 
 ## API Layering
 
@@ -88,6 +89,29 @@ Prompt logging is part of pass 1, not an afterthought. Logs should support:
 - Future evaluation and regression testing.
 
 The `metadata` JSONB column is the extension point for workflow-specific details such as applied augmentation mode, search counts, citations, selected retrievers, and future tool traces.
+
+`prompt_logs.augmented_prompt` stores the full prompt envelope used by the workflow:
+
+- workflow plan
+- retrieval tool configuration
+- system prompt
+- original user prompt
+
+For Claude server-side web search, the actual search result injection happens inside
+the Claude API call. The application therefore logs the exact prompt envelope sent to
+Claude and separately persists returned citations as RAG seed data.
+
+## RAG Seed Data From Web Search
+
+When web search is applied and Claude returns citations:
+
+- each cited URL is upserted into `rag_documents`
+- each cited snippet is appended to `rag_chunks`
+- chunk metadata links back to the originating `promptLogId`
+- embeddings remain `null` until the embedding pipeline is implemented
+
+This gives the project a durable retrieval corpus from externally sourced answers
+without pretending that citation snippets are already fully embedded RAG knowledge.
 
 ## Configuration
 
