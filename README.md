@@ -54,9 +54,16 @@ embedding pipeline is added.
 Relevant environment settings:
 
 ```sh
+CLAUDE_PROMPT_CACHE_ENABLED=true
 CLAUDE_WEB_SEARCH_ENABLED=true
 CLAUDE_WEB_SEARCH_MAX_USES=3
+LOCAL_RESPONSE_CACHE_ENABLED=true
+LOCAL_RESPONSE_CACHE_TTL_SECONDS=300
 ```
+
+Claude prompt caching is enabled with explicit cache breakpoints on stable provider
+request prefixes. Local response caching stores exact-repeat prompt responses in
+Postgres for a short TTL and bypasses Claude entirely on a hit.
 
 ## Docker
 

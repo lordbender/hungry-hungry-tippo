@@ -13,6 +13,11 @@ export interface PromptPlan {
     enabled: boolean;
     maxUses: number;
   };
+  promptCache: {
+    claudeEnabled: boolean;
+    localEnabled: boolean;
+    localTtlSeconds: number;
+  };
 }
 
 const liveContextPatterns = [
@@ -60,6 +65,11 @@ function buildAugmentedPrompt(input: {
     enabled: boolean;
     maxUses: number;
   };
+  promptCache: {
+    claudeEnabled: boolean;
+    localEnabled: boolean;
+    localTtlSeconds: number;
+  };
 }) {
   return [
     "=== Agentic Workflow Prompt Envelope ===",
@@ -73,6 +83,12 @@ function buildAugmentedPrompt(input: {
     input.webSearch.enabled
       ? `Claude server tool enabled: web_search_20250305, max_uses=${input.webSearch.maxUses}, tool_choice=web_search`
       : "No retrieval tool enabled for this request.",
+    "",
+    "## Caching",
+    `Claude prompt caching: ${input.promptCache.claudeEnabled ? "enabled" : "disabled"}`,
+    `Local response caching: ${
+      input.promptCache.localEnabled ? `enabled, ttl=${input.promptCache.localTtlSeconds}s` : "disabled"
+    }`,
     "",
     "## System Prompt",
     input.systemPrompt,
@@ -99,6 +115,11 @@ export class PromptConductorService {
       enabled: webSearchEnabled,
       maxUses: env.CLAUDE_WEB_SEARCH_MAX_USES
     };
+    const promptCache = {
+      claudeEnabled: env.CLAUDE_PROMPT_CACHE_ENABLED,
+      localEnabled: env.LOCAL_RESPONSE_CACHE_ENABLED,
+      localTtlSeconds: env.LOCAL_RESPONSE_CACHE_TTL_SECONDS
+    };
 
     return {
       requestedMode,
@@ -111,9 +132,11 @@ export class PromptConductorService {
         appliedMode: finalAppliedMode,
         rationale,
         systemPrompt,
-        webSearch
+        webSearch,
+        promptCache
       }),
-      webSearch
+      webSearch,
+      promptCache
     };
   }
 

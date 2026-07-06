@@ -15,6 +15,19 @@ services:
       timeout: 5s
       retries: 10
 
+  pgadmin:
+    image: dpage/pgadmin4:8
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@hungry-hungry-tippo.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-tippo-admin}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build:
       context: .
@@ -24,8 +37,11 @@ services:
       API_PORT: 3001
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-4-8}
       CLAUDE_MAX_TOKENS: ${CLAUDE_MAX_TOKENS:-1024}
+      CLAUDE_PROMPT_CACHE_ENABLED: ${CLAUDE_PROMPT_CACHE_ENABLED:-true}
       CLAUDE_WEB_SEARCH_ENABLED: ${CLAUDE_WEB_SEARCH_ENABLED:-true}
       CLAUDE_WEB_SEARCH_MAX_USES: ${CLAUDE_WEB_SEARCH_MAX_USES:-3}
+      LOCAL_RESPONSE_CACHE_ENABLED: ${LOCAL_RESPONSE_CACHE_ENABLED:-true}
+      LOCAL_RESPONSE_CACHE_TTL_SECONDS: ${LOCAL_RESPONSE_CACHE_TTL_SECONDS:-300}
       DATABASE_URL: postgres://${POSTGRES_USER:-tippo}:${POSTGRES_PASSWORD:-tippo}@postgres:5432/${POSTGRES_DB:-tippo}
       NODE_ENV: production
       WEB_ORIGIN: http://localhost:${WEB_PORT:-5173}
@@ -48,3 +64,4 @@ services:
 
 volumes:
   postgres-data:
+  pgadmin-data:

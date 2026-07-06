@@ -9,6 +9,8 @@ export interface PromptLog {
   status: PromptLogStatus;
   latencyMs: number | null;
   inputTokens: number | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
   outputTokens: number | null;
   errorMessage: string | null;
   metadata: Record<string, unknown>;
@@ -28,6 +30,8 @@ export interface CompletePromptLogInput {
   response: string;
   latencyMs: number;
   inputTokens: number | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
   outputTokens: number | null;
   metadata?: Record<string, unknown>;
 }

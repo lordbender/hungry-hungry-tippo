@@ -15,6 +15,8 @@ type PromptLogRow = {
   status: PromptLog["status"];
   latency_ms: number | null;
   input_tokens: number | null;
+  cache_creation_input_tokens: number | null;
+  cache_read_input_tokens: number | null;
   output_tokens: number | null;
   error_message: string | null;
   metadata: Record<string, unknown>;
@@ -32,6 +34,8 @@ function toPromptLog(row: PromptLogRow): PromptLog {
     status: row.status,
     latencyMs: row.latency_ms,
     inputTokens: row.input_tokens,
+    cacheCreationInputTokens: row.cache_creation_input_tokens,
+    cacheReadInputTokens: row.cache_read_input_tokens,
     outputTokens: row.output_tokens,
     errorMessage: row.error_message,
     metadata: row.metadata,
@@ -70,8 +74,10 @@ export class PromptLogRepository {
             status = 'succeeded',
             latency_ms = $3,
             input_tokens = $4,
-            output_tokens = $5,
-            metadata = metadata || $6::jsonb,
+            cache_creation_input_tokens = $5,
+            cache_read_input_tokens = $6,
+            output_tokens = $7,
+            metadata = metadata || $8::jsonb,
             updated_at = now()
         where id = $1
         returning *
@@ -81,6 +87,8 @@ export class PromptLogRepository {
         input.response,
         input.latencyMs,
         input.inputTokens,
+        input.cacheCreationInputTokens,
+        input.cacheReadInputTokens,
         input.outputTokens,
         input.metadata ?? {}
       ]

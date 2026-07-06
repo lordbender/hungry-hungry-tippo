@@ -90,6 +90,13 @@ Prompt logging is part of pass 1, not an afterthought. Logs should support:
 
 The `metadata` JSONB column is the extension point for workflow-specific details such as applied augmentation mode, search counts, citations, selected retrievers, and future tool traces.
 
+Prompt logs also capture cache behavior:
+
+- local response cache hit/miss
+- Claude prompt cache enabled flag
+- Claude cache write tokens
+- Claude cache read tokens
+
 `prompt_logs.augmented_prompt` stores the full prompt envelope used by the workflow:
 
 - workflow plan
@@ -113,6 +120,22 @@ When web search is applied and Claude returns citations:
 This gives the project a durable retrieval corpus from externally sourced answers
 without pretending that citation snippets are already fully embedded RAG knowledge.
 
+## Caching
+
+The app has two caching layers:
+
+- Claude prompt caching: explicit `cache_control` breakpoints are added to stable
+  Claude request prefixes such as the system prompt and web-search tool definition.
+  This can reduce provider-side latency and cost when the cached prefix is large
+  enough for the selected model.
+- Local response caching: exact-repeat requests are cached in Postgres for a short
+  TTL. A local cache hit bypasses Claude entirely and still creates a prompt log for
+  auditability.
+
+Claude prompt caching only applies when the cacheable prefix meets Anthropic's model
+minimum token threshold. Short prompts may report zero cache write/read tokens even
+when cache controls are present.
+
 ## Configuration
 
 Important environment settings:
@@ -121,8 +144,11 @@ Important environment settings:
 ANTHROPIC_API_KEY=
 CLAUDE_MODEL=claude-opus-4-8
 CLAUDE_MAX_TOKENS=1024
+CLAUDE_PROMPT_CACHE_ENABLED=true
 CLAUDE_WEB_SEARCH_ENABLED=true
 CLAUDE_WEB_SEARCH_MAX_USES=3
+LOCAL_RESPONSE_CACHE_ENABLED=true
+LOCAL_RESPONSE_CACHE_TTL_SECONDS=300
 DATABASE_URL=postgres://tippo:tippo@localhost:5432/tippo
 ```
 

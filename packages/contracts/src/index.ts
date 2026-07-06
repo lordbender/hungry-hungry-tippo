@@ -21,11 +21,14 @@ export const PromptResponseSchema = z.object({
     requestedMode: AugmentationModeSchema,
     appliedMode: z.enum(["direct", "web_search"]),
     webSearchRequests: z.number().int().nonnegative(),
+    localCacheHit: z.boolean(),
     citations: z.array(CitationSchema),
     rationale: z.string()
   }),
   usage: z.object({
     inputTokens: z.number().int().nonnegative().nullable(),
+    cacheCreationInputTokens: z.number().int().nonnegative().nullable(),
+    cacheReadInputTokens: z.number().int().nonnegative().nullable(),
     outputTokens: z.number().int().nonnegative().nullable()
   })
 });

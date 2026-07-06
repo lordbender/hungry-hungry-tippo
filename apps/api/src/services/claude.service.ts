@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Citation } from "@hhh/contracts";
+import type { MessageCreateParamsNonStreaming } from "@anthropic-ai/sdk/resources/messages/messages";
 import { env } from "../config/env.js";
 import { AppError } from "../errors/app-error.js";
 
@@ -16,6 +17,8 @@ export interface ClaudeCompletion {
   text: string;
   model: string;
   inputTokens: number | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
   outputTokens: number | null;
   webSearchRequests: number;
   citations: Citation[];
@@ -37,20 +40,33 @@ export class ClaudeService {
       );
     }
 
+    const system: MessageCreateParamsNonStreaming["system"] = env.CLAUDE_PROMPT_CACHE_ENABLED
+      ? [
+          {
+            type: "text",
+            text: input.systemPrompt,
+            cache_control: { type: "ephemeral" }
+          }
+        ]
+      : input.systemPrompt;
+
+    const tools: MessageCreateParamsNonStreaming["tools"] = input.webSearch?.enabled
+      ? [
+          {
+            type: "web_search_20250305",
+            name: "web_search",
+            max_uses: input.webSearch.maxUses,
+            cache_control: env.CLAUDE_PROMPT_CACHE_ENABLED ? { type: "ephemeral" } : undefined
+          }
+        ]
+      : undefined;
+
     const message = await this.client.messages.create({
       model: env.CLAUDE_MODEL,
       max_tokens: env.CLAUDE_MAX_TOKENS,
-      system: input.systemPrompt,
+      system,
       messages: [{ role: "user", content: input.prompt }],
-      tools: input.webSearch?.enabled
-        ? [
-            {
-              type: "web_search_20250305",
-              name: "web_search",
-              max_uses: input.webSearch.maxUses
-            }
-          ]
-        : undefined,
+      tools,
       tool_choice: input.webSearch?.enabled ? { type: "tool", name: "web_search" } : undefined
     });
 
@@ -60,6 +76,8 @@ export class ClaudeService {
       text: textBlocks.map((block) => block.text).join("\n"),
       model: message.model,
       inputTokens: message.usage?.input_tokens ?? null,
+      cacheCreationInputTokens: message.usage?.cache_creation_input_tokens ?? null,
+      cacheReadInputTokens: message.usage?.cache_read_input_tokens ?? null,
       outputTokens: message.usage?.output_tokens ?? null,
       webSearchRequests: message.usage?.server_tool_use?.web_search_requests ?? 0,
       citations: uniqueCitations(

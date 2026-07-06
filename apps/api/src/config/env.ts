@@ -13,6 +13,15 @@ const EnvSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(3001),
   CLAUDE_MAX_TOKENS: z.coerce.number().int().positive().default(1024),
   CLAUDE_MODEL: z.string().min(1).default("claude-opus-4-8"),
+  CLAUDE_PROMPT_CACHE_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  LOCAL_RESPONSE_CACHE_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  LOCAL_RESPONSE_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   CLAUDE_WEB_SEARCH_ENABLED: z
     .enum(["true", "false"])
     .default("true")

@@ -157,6 +157,12 @@ export function App() {
                     <Chip label={result.model} size="small" />
                     <Chip label={`Mode ${result.workflow.appliedMode}`} size="small" />
                     <Chip
+                      label={result.workflow.localCacheHit ? "Local cache hit" : "Local cache miss"}
+                      size="small"
+                      color={result.workflow.localCacheHit ? "success" : "default"}
+                      variant={result.workflow.localCacheHit ? "filled" : "outlined"}
+                    />
+                    <Chip
                       label={`Searches ${result.workflow.webSearchRequests}`}
                       size="small"
                       variant="outlined"
@@ -164,6 +170,11 @@ export function App() {
                     <Chip label={`Log ${result.promptLogId}`} size="small" variant="outlined" />
                     <Chip
                       label={`Tokens ${result.usage.inputTokens ?? "?"}/${result.usage.outputTokens ?? "?"}`}
+                      size="small"
+                      variant="outlined"
+                    />
+                    <Chip
+                      label={`Claude cache ${result.usage.cacheCreationInputTokens ?? 0}/${result.usage.cacheReadInputTokens ?? 0}`}
                       size="small"
                       variant="outlined"
                     />
