@@ -1,0 +1,24 @@
+{
+  "name": "hungry-hungry-tippo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Starter full-stack agentic workflow example with Express, React, Material UI, Claude, and Postgres/pgvector.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @hhh/contracts && npm run build -w @hhh/api && npm run build -w @hhh/web",
+    "dev": "npm run build -w @hhh/contracts && concurrently \"npm run dev -w @hhh/api\" \"npm run dev -w @hhh/web\"",
+    "lint": "npm run lint --workspaces --if-present",
+    "migrate": "npm run migrate -w @hhh/api",
+    "typecheck": "npm run build -w @hhh/contracts && npm run typecheck -w @hhh/api && npm run typecheck -w @hhh/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

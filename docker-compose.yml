@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tippo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tippo}
+      POSTGRES_DB: ${POSTGRES_DB:-tippo}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tippo} -d ${POSTGRES_DB:-tippo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      API_PORT: 3001
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-4-8}
+      CLAUDE_MAX_TOKENS: ${CLAUDE_MAX_TOKENS:-1024}
+      CLAUDE_WEB_SEARCH_ENABLED: ${CLAUDE_WEB_SEARCH_ENABLED:-true}
+      CLAUDE_WEB_SEARCH_MAX_USES: ${CLAUDE_WEB_SEARCH_MAX_USES:-3}
+      DATABASE_URL: postgres://${POSTGRES_USER:-tippo}:${POSTGRES_PASSWORD:-tippo}@postgres:5432/${POSTGRES_DB:-tippo}
+      NODE_ENV: production
+      WEB_ORIGIN: http://localhost:${WEB_PORT:-5173}
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:3001
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
