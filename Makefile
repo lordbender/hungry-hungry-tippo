@@ -1,4 +1,4 @@
-.PHONY: build db-down db-logs db-up dev docker-build down install logs migrate pgadmin-up pgadmin-logs ps test typecheck up
+.PHONY: build db-down db-logs db-up dev docker-build down install keycloak-logs keycloak-up logs migrate pgadmin-up pgadmin-logs ps test typecheck up
 
 install:
 	npm install
@@ -25,6 +25,12 @@ pgadmin-up:
 
 pgadmin-logs:
 	docker compose logs -f pgadmin
+
+keycloak-up:
+	docker compose up -d keycloak-db keycloak
+
+keycloak-logs:
+	docker compose logs -f keycloak
 
 db-down:
 	docker compose down

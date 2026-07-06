@@ -8,6 +8,7 @@ Starter full-stack agentic workflow example using:
 - Postgres with `pgvector` ready for pass 2 RAG storage
 - Prompt logging in Postgres
 - First-pass agentic orchestration with optional Claude web search augmentation
+- Keycloak-protected prompt workflow UI and API
 
 ## Project Layout
 
@@ -23,6 +24,7 @@ packages/contracts    Shared request/response schemas and TypeScript types
 cp .env.example .env
 make install
 make db-up
+make keycloak-up
 make migrate
 make dev
 ```
@@ -32,6 +34,17 @@ The web app runs at `http://localhost:5173` and the API at `http://localhost:300
 Set `ANTHROPIC_API_KEY` in `.env` before submitting prompts. The API creates a
 `prompt_logs` row before every Claude call and updates it with response, latency,
 token usage, or error details.
+
+The prompt workflow is protected by Keycloak. Local defaults:
+
+```text
+Keycloak: http://localhost:8081
+Admin console: http://localhost:8081/admin
+Master admin: admin / admin
+App admin: admin / admin
+```
+
+See [docs/keycloak.md](docs/keycloak.md) for realm, client, and provisioning details.
 
 ## Prompt Orchestration
 

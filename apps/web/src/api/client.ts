@@ -7,10 +7,11 @@ import {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001";
 
-export async function submitPrompt(request: PromptRequest): Promise<PromptResponse> {
+export async function submitPrompt(request: PromptRequest, accessToken: string): Promise<PromptResponse> {
   const response = await fetch(`${apiBaseUrl}/api/prompts`, {
     method: "POST",
     headers: {
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify(request)

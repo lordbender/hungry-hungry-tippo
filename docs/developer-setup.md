@@ -35,6 +35,7 @@ The default local URLs are:
 - API: `http://localhost:3001`
 - API health: `http://localhost:3001/health`
 - PGAdmin: `http://localhost:5050`
+- Keycloak: `http://localhost:8081`
 
 Set `ANTHROPIC_API_KEY` in `.env` before submitting prompts to Claude.
 
@@ -212,6 +213,7 @@ limit 25;
 make install       # install npm workspace dependencies
 make db-up         # start only Postgres
 make pgadmin-up    # start Postgres and PGAdmin
+make keycloak-up   # start local Keycloak and its database
 make migrate       # apply database migrations
 make dev           # run API and web app in dev mode
 make typecheck     # run TypeScript checks

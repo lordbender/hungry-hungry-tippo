@@ -8,7 +8,13 @@ RUN npm install
 FROM deps AS build
 WORKDIR /app
 ARG VITE_API_BASE_URL=http://localhost:3001
+ARG VITE_KEYCLOAK_URL=http://localhost:8081
+ARG VITE_KEYCLOAK_REALM=hungry-hungry-tippo
+ARG VITE_KEYCLOAK_CLIENT_ID=hungry-hungry-tippo-web
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL
+ENV VITE_KEYCLOAK_REALM=$VITE_KEYCLOAK_REALM
+ENV VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID
 COPY packages/contracts packages/contracts
 COPY apps/web apps/web
 RUN npm run build -w @hhh/contracts

@@ -7,7 +7,7 @@ import { claudeService } from "./claude.service.js";
 import { promptConductorService } from "./prompt-conductor.service.js";
 
 export class PromptWorkflowService {
-  async submitPrompt(request: PromptRequest): Promise<PromptResponse> {
+  async submitPrompt(request: PromptRequest, actor?: { subject: string; username?: string }): Promise<PromptResponse> {
     const startedAt = Date.now();
     const plan = promptConductorService.plan(request);
     const promptLog = await promptLogRepository.create({
@@ -20,7 +20,8 @@ export class PromptWorkflowService {
           appliedMode: plan.appliedMode,
           rationale: plan.rationale,
           webSearchMaxUses: plan.webSearch.enabled ? plan.webSearch.maxUses : 0,
-          promptCache: plan.promptCache
+          promptCache: plan.promptCache,
+          actor
         }
       }
     });

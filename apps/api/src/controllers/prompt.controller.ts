@@ -4,7 +4,7 @@ import { promptWorkflowService } from "../services/prompt-workflow.service.js";
 
 export async function submitPrompt(req: Request, res: Response) {
   const request = PromptRequestSchema.parse(req.body);
-  const result = await promptWorkflowService.submitPrompt(request);
+  const result = await promptWorkflowService.submitPrompt(request, req.auth);
 
   res.status(201).json(result);
 }

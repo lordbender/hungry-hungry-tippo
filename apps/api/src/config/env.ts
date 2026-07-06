@@ -22,6 +22,16 @@ const EnvSchema = z.object({
     .default("true")
     .transform((value) => value === "true"),
   LOCAL_RESPONSE_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  KEYCLOAK_AUTH_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  KEYCLOAK_CLIENT_ID: z.string().min(1).default("hungry-hungry-tippo-web"),
+  KEYCLOAK_ISSUER: z.string().url().default("http://localhost:8081/realms/hungry-hungry-tippo"),
+  KEYCLOAK_JWKS_URI: z
+    .string()
+    .url()
+    .default("http://localhost:8081/realms/hungry-hungry-tippo/protocol/openid-connect/certs"),
   CLAUDE_WEB_SEARCH_ENABLED: z
     .enum(["true", "false"])
     .default("true")

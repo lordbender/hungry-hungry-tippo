@@ -1,0 +1,59 @@
+{
+  "realm": "hungry-hungry-tippo",
+  "enabled": true,
+  "displayName": "Hungry Hungry Tippo",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "tippo-admin",
+        "description": "Application administrator"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "hungry-hungry-tippo-web",
+      "name": "Hungry Hungry Tippo Web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@hungry-hungry-tippo.local",
+      "firstName": "Tippo",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "tippo-admin"
+      ]
+    }
+  ]
+}
