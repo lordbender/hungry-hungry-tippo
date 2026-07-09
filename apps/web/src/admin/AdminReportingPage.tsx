@@ -473,7 +473,10 @@ function InvoicesScreen({
             <TableCell>Period</TableCell>
             <TableCell>Status</TableCell>
             <TableCell align="right">Requests</TableCell>
-            <TableCell align="right">Tokens</TableCell>
+            <TableCell align="right">Credits</TableCell>
+            <TableCell align="right">Rate</TableCell>
+            <TableCell align="right">Cost</TableCell>
+            <TableCell align="right">Amount</TableCell>
             <TableCell align="right">Report</TableCell>
           </TableRow>
         </TableHead>
@@ -487,7 +490,10 @@ function InvoicesScreen({
               </TableCell>
               <TableCell>{invoice.status}</TableCell>
               <TableCell align="right">{formatNumber(invoice.requestCount)}</TableCell>
-              <TableCell align="right">{formatNumber(invoice.subtotalTokens)}</TableCell>
+              <TableCell align="right">{formatNumber(invoice.subtotalCredits)}</TableCell>
+              <TableCell align="right">{formatUsd(invoice.pricePerCreditUsd)}</TableCell>
+              <TableCell align="right">{formatCurrency(invoice.costCents)}</TableCell>
+              <TableCell align="right">{formatCurrency(invoice.amountCents)}</TableCell>
               <TableCell align="right">
                 <Button
                   size="small"
@@ -502,7 +508,7 @@ function InvoicesScreen({
           ))}
           {invoices.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7}>No invoices have been created.</TableCell>
+              <TableCell colSpan={10}>No invoices have been created.</TableCell>
             </TableRow>
           ) : null}
         </TableBody>
@@ -555,6 +561,14 @@ function formatDate(value: string) {
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function formatCurrency(amountCents: number) {
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(amountCents / 100);
+}
+
+function formatUsd(value: number) {
+  return `$${value.toFixed(6)}`;
 }
 
 function triggerBlobDownload(blob: Blob, filename: string) {

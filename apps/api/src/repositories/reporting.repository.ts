@@ -6,6 +6,7 @@ import type {
   OrganizationUsageResponse,
   UsageSummary
 } from "@hhh/contracts";
+import { env } from "../config/env.js";
 import { pool } from "../database/pool.js";
 
 type UsageSummaryRow = {
@@ -75,6 +76,11 @@ type InvoiceRow = {
   request_count: number;
   failed_request_count: number;
   subtotal_tokens: number;
+  subtotal_credits: number;
+  cost_per_credit_usd: string;
+  price_per_credit_usd: string;
+  markup_rate: string;
+  cost_cents: number;
   amount_cents: number;
   created_at: Date;
   report_generated_at: Date | null;
@@ -83,6 +89,7 @@ type InvoiceRow = {
 type InvoiceLineItemRow = {
   id: string;
   invoice_id: string;
+  user_id: string | null;
   description: string;
   request_count: number;
   input_tokens: number;
@@ -90,6 +97,11 @@ type InvoiceLineItemRow = {
   cache_read_input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  credit_count: number;
+  cost_per_credit_usd: string;
+  price_per_credit_usd: string;
+  markup_rate: string;
+  cost_cents: number;
   amount_cents: number;
 };
 
@@ -129,6 +141,10 @@ function summarySelect(alias = "pl") {
 
 function toIso(value: Date) {
   return value.toISOString();
+}
+
+function toNumber(value: string | number) {
+  return typeof value === "number" ? value : Number(value);
 }
 
 function toSummary(row: UsageSummaryRow): UsageSummary {
@@ -179,6 +195,11 @@ function toInvoice(row: InvoiceRow, lineItems: InvoiceLineItemRow[]): Invoice {
     requestCount: row.request_count,
     failedRequestCount: row.failed_request_count,
     subtotalTokens: row.subtotal_tokens,
+    subtotalCredits: row.subtotal_credits,
+    costPerCreditUsd: toNumber(row.cost_per_credit_usd),
+    pricePerCreditUsd: toNumber(row.price_per_credit_usd),
+    markupRate: toNumber(row.markup_rate),
+    costCents: row.cost_cents,
     amountCents: row.amount_cents,
     createdAt: toIso(row.created_at),
     reportGeneratedAt: row.report_generated_at ? toIso(row.report_generated_at) : null,
@@ -186,6 +207,7 @@ function toInvoice(row: InvoiceRow, lineItems: InvoiceLineItemRow[]): Invoice {
       .filter((line) => line.invoice_id === row.id)
       .map((line) => ({
         id: line.id,
+        userId: line.user_id,
         description: line.description,
         requestCount: line.request_count,
         inputTokens: line.input_tokens,
@@ -193,6 +215,11 @@ function toInvoice(row: InvoiceRow, lineItems: InvoiceLineItemRow[]): Invoice {
         cacheReadInputTokens: line.cache_read_input_tokens,
         outputTokens: line.output_tokens,
         totalTokens: line.total_tokens,
+        creditCount: line.credit_count,
+        costPerCreditUsd: toNumber(line.cost_per_credit_usd),
+        pricePerCreditUsd: toNumber(line.price_per_credit_usd),
+        markupRate: toNumber(line.markup_rate),
+        costCents: line.cost_cents,
         amountCents: line.amount_cents
       }))
   };
@@ -389,6 +416,9 @@ export class ReportingRepository {
     createdByUserId?: string;
   }): Promise<Invoice> {
     const invoiceNumber = this.createInvoiceNumber();
+    const costPerCreditUsd = env.BILLING_COST_PER_CREDIT_USD;
+    const markupRate = env.BILLING_CREDIT_MARKUP_RATE;
+    const pricePerCreditUsd = costPerCreditUsd * (1 + markupRate);
     const client = await pool.connect();
 
     try {
@@ -414,10 +444,15 @@ export class ReportingRepository {
             request_count,
             failed_request_count,
             subtotal_tokens,
+            subtotal_credits,
+            cost_per_credit_usd,
+            price_per_credit_usd,
+            markup_rate,
+            cost_cents,
             amount_cents,
             created_by_user_id
           )
-          values ($1, $2, $3, $4, $5, $6, $7, 0, $8)
+          values ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, 0, 0, $11)
           returning
             id,
             invoice_number,
@@ -429,6 +464,11 @@ export class ReportingRepository {
             request_count,
             failed_request_count,
             subtotal_tokens,
+            subtotal_credits,
+            cost_per_credit_usd,
+            price_per_credit_usd,
+            markup_rate,
+            cost_cents,
             amount_cents,
             null::timestamptz as report_generated_at,
             created_at
@@ -441,6 +481,9 @@ export class ReportingRepository {
           summary.requestCount,
           summary.failedRequestCount,
           summary.totalTokens,
+          costPerCreditUsd,
+          pricePerCreditUsd,
+          markupRate,
           input.createdByUserId ?? null
         ]
       );
@@ -454,6 +497,7 @@ export class ReportingRepository {
         `
           insert into invoice_line_items (
             invoice_id,
+            user_id,
             description,
             request_count,
             input_tokens,
@@ -461,29 +505,100 @@ export class ReportingRepository {
             cache_read_input_tokens,
             output_tokens,
             total_tokens,
+            credit_count,
+            cost_per_credit_usd,
+            price_per_credit_usd,
+            markup_rate,
+            cost_cents,
             amount_cents
+          )
+          with user_usage as (
+            select
+              users.id as user_id,
+              users.username,
+              count(*)::int as request_count,
+              coalesce(sum(coalesce(pl.input_tokens, 0)), 0)::int as input_tokens,
+              coalesce(sum(coalesce(pl.cache_creation_input_tokens, 0)), 0)::int as cache_creation_input_tokens,
+              coalesce(sum(coalesce(pl.cache_read_input_tokens, 0)), 0)::int as cache_read_input_tokens,
+              coalesce(sum(coalesce(pl.output_tokens, 0)), 0)::int as output_tokens,
+              coalesce(sum(
+                coalesce(pl.input_tokens, 0) +
+                coalesce(pl.cache_creation_input_tokens, 0) +
+                coalesce(pl.cache_read_input_tokens, 0) +
+                coalesce(pl.output_tokens, 0)
+              ), 0)::int as credit_count
+            from prompt_logs pl
+            join app_users users on users.id = pl.user_id
+            where pl.organization_id = $2 and pl.created_at >= $3 and pl.created_at < $4
+            group by users.id, users.username
           )
           select
             $1,
-            'Model usage: ' || pl.model,
-            count(*)::int,
-            coalesce(sum(coalesce(pl.input_tokens, 0)), 0)::int,
-            coalesce(sum(coalesce(pl.cache_creation_input_tokens, 0)), 0)::int,
-            coalesce(sum(coalesce(pl.cache_read_input_tokens, 0)), 0)::int,
-            coalesce(sum(coalesce(pl.output_tokens, 0)), 0)::int,
-            coalesce(sum(
-              coalesce(pl.input_tokens, 0) +
-              coalesce(pl.cache_creation_input_tokens, 0) +
-              coalesce(pl.cache_read_input_tokens, 0) +
-              coalesce(pl.output_tokens, 0)
-            ), 0)::int,
-            0
-          from prompt_logs pl
-          where pl.organization_id = $2 and pl.created_at >= $3 and pl.created_at < $4
-          group by pl.model
-          order by pl.model
+            user_id,
+            'User usage: ' || username,
+            request_count,
+            input_tokens,
+            cache_creation_input_tokens,
+            cache_read_input_tokens,
+            output_tokens,
+            credit_count,
+            credit_count,
+            $5::numeric,
+            $6::numeric,
+            $7::numeric,
+            round(credit_count * $5::numeric * 100)::int,
+            round(credit_count * $6::numeric * 100)::int
+          from user_usage
+          order by username
         `,
-        [invoiceRow.id, input.organizationId, input.periodStart, input.periodEnd]
+        [
+          invoiceRow.id,
+          input.organizationId,
+          input.periodStart,
+          input.periodEnd,
+          costPerCreditUsd,
+          pricePerCreditUsd,
+          markupRate
+        ]
+      );
+
+      const refreshedInvoice = await client.query<InvoiceRow>(
+        `
+          update invoices
+          set cost_cents = coalesce(lines.cost_cents, 0),
+              amount_cents = coalesce(lines.amount_cents, 0),
+              updated_at = now()
+          from (
+            select
+              invoice_id,
+              sum(cost_cents)::int as cost_cents,
+              sum(amount_cents)::int as amount_cents
+            from invoice_line_items
+            where invoice_id = $1
+            group by invoice_id
+          ) lines
+          where invoices.id = $1
+          returning
+            id,
+            invoice_number,
+            organization_id,
+            (select name from organizations where id = invoices.organization_id) as organization_name,
+            period_start,
+            period_end,
+            status,
+            request_count,
+            failed_request_count,
+            subtotal_tokens,
+            subtotal_credits,
+            cost_per_credit_usd,
+            price_per_credit_usd,
+            markup_rate,
+            cost_cents,
+            amount_cents,
+            null::timestamptz as report_generated_at,
+            created_at
+        `,
+        [invoiceRow.id]
       );
 
       const lineItems = await client.query<InvoiceLineItemRow>(
@@ -491,6 +606,7 @@ export class ReportingRepository {
           select
             id,
             invoice_id,
+            user_id,
             description,
             request_count,
             input_tokens,
@@ -498,6 +614,11 @@ export class ReportingRepository {
             cache_read_input_tokens,
             output_tokens,
             total_tokens,
+            credit_count,
+            cost_per_credit_usd,
+            price_per_credit_usd,
+            markup_rate,
+            cost_cents,
             amount_cents
           from invoice_line_items
           where invoice_id = $1
@@ -507,7 +628,7 @@ export class ReportingRepository {
       );
 
       await client.query("commit");
-      return toInvoice(invoiceRow, lineItems.rows);
+      return toInvoice(refreshedInvoice.rows[0] ?? invoiceRow, lineItems.rows);
     } catch (error) {
       await client.query("rollback");
       throw error;
@@ -530,6 +651,11 @@ export class ReportingRepository {
           invoices.request_count,
           invoices.failed_request_count,
           invoices.subtotal_tokens,
+          invoices.subtotal_credits,
+          invoices.cost_per_credit_usd,
+          invoices.price_per_credit_usd,
+          invoices.markup_rate,
+          invoices.cost_cents,
           invoices.amount_cents,
           invoices.created_at,
           invoice_reports.generated_at as report_generated_at
@@ -545,27 +671,9 @@ export class ReportingRepository {
       return [];
     }
 
-    const lineItems = await pool.query<InvoiceLineItemRow>(
-      `
-        select
-          id,
-          invoice_id,
-          description,
-          request_count,
-          input_tokens,
-          cache_creation_input_tokens,
-          cache_read_input_tokens,
-          output_tokens,
-          total_tokens,
-          amount_cents
-        from invoice_line_items
-        where invoice_id = any($1::uuid[])
-        order by description asc
-      `,
-      [invoices.rows.map((invoice) => invoice.id)]
-    );
+    const lineItems = await this.listInvoiceLineItems(invoices.rows.map((invoice) => invoice.id));
 
-    return invoices.rows.map((invoice) => toInvoice(invoice, lineItems.rows));
+    return invoices.rows.map((invoice) => toInvoice(invoice, lineItems));
   }
 
   async getInvoice(invoiceId: string): Promise<Invoice | null> {
@@ -582,6 +690,11 @@ export class ReportingRepository {
           invoices.request_count,
           invoices.failed_request_count,
           invoices.subtotal_tokens,
+          invoices.subtotal_credits,
+          invoices.cost_per_credit_usd,
+          invoices.price_per_credit_usd,
+          invoices.markup_rate,
+          invoices.cost_cents,
           invoices.amount_cents,
           invoices.created_at,
           invoice_reports.generated_at as report_generated_at
@@ -655,6 +768,7 @@ export class ReportingRepository {
         select
           id,
           invoice_id,
+          user_id,
           description,
           request_count,
           input_tokens,
@@ -662,6 +776,11 @@ export class ReportingRepository {
           cache_read_input_tokens,
           output_tokens,
           total_tokens,
+          credit_count,
+          cost_per_credit_usd,
+          price_per_credit_usd,
+          markup_rate,
+          cost_cents,
           amount_cents
         from invoice_line_items
         where invoice_id = any($1::uuid[])

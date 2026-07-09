@@ -33,29 +33,32 @@ function buildContent(invoice: Invoice) {
     text(290, 674, "F2", 11, "Summary"),
     text(290, 654, "F1", 10, `Requests: ${formatNumber(invoice.requestCount)}`),
     text(290, 638, "F1", 10, `Failed requests: ${formatNumber(invoice.failedRequestCount)}`),
-    text(290, 622, "F1", 10, `Total tokens: ${formatNumber(invoice.subtotalTokens)}`),
-    text(290, 606, "F1", 10, `Amount: ${formatCurrency(invoice.amountCents)}`),
+    text(290, 622, "F1", 10, `Credits: ${formatNumber(invoice.subtotalCredits)}`),
+    text(290, 606, "F1", 10, `Cost per credit: ${formatUsd(invoice.costPerCreditUsd)}`),
+    text(290, 590, "F1", 10, `Billed per credit: ${formatUsd(invoice.pricePerCreditUsd)}`),
+    text(290, 574, "F1", 10, `Amount: ${formatCurrency(invoice.amountCents)}`),
     line(50, 582, 562, 582),
-    text(50, 558, "F2", 12, "Line Items"),
-    tableHeader(534)
+    text(50, 550, "F2", 12, "User Credit Usage"),
+    tableHeader(526)
   ];
 
-  let y = 510;
+  let y = 502;
   const lineItems = invoice.lineItems.length > 0 ? invoice.lineItems : [emptyLineItem()];
 
   for (const item of lineItems.slice(0, 10)) {
-    lines.push(text(50, y, "F1", 9, truncate(item.description, 34)));
-    lines.push(textRight(266, y, "F1", 9, formatNumber(item.requestCount)));
-    lines.push(textRight(350, y, "F1", 9, formatNumber(item.inputTokens)));
-    lines.push(textRight(434, y, "F1", 9, formatNumber(item.outputTokens)));
-    lines.push(textRight(518, y, "F1", 9, formatNumber(item.totalTokens)));
+    lines.push(text(50, y, "F1", 9, truncate(item.description.replace(/^User usage: /, ""), 28)));
+    lines.push(textRight(242, y, "F1", 9, formatNumber(item.requestCount)));
+    lines.push(textRight(332, y, "F1", 9, formatNumber(item.creditCount)));
+    lines.push(textRight(426, y, "F1", 9, formatUsd(item.pricePerCreditUsd)));
+    lines.push(textRight(500, y, "F1", 9, formatCurrency(item.costCents)));
     lines.push(textRight(562, y, "F1", 9, formatCurrency(item.amountCents)));
     y -= 22;
   }
 
   lines.push(line(50, y + 8, 562, y + 8));
   lines.push(text(50, 86, "F1", 8, "This PDF is generated once and stored with the invoice for repeatable downloads."));
-  lines.push(text(50, 70, "F1", 8, "Token totals include input, cache creation, cache read, and output tokens."));
+  lines.push(text(50, 70, "F1", 8, "Credits are calculated from input, cache creation, cache read, and output tokens."));
+  lines.push(text(50, 54, "F1", 8, `Markup: ${formatPercent(invoice.markupRate)} over API cost per credit.`));
 
   return `${lines.join("\n")}\n`;
 }
@@ -63,10 +66,10 @@ function buildContent(invoice: Invoice) {
 function tableHeader(y: number) {
   return [
     text(50, y, "F2", 9, "Description"),
-    textRight(266, y, "F2", 9, "Requests"),
-    textRight(350, y, "F2", 9, "Input"),
-    textRight(434, y, "F2", 9, "Output"),
-    textRight(518, y, "F2", 9, "Tokens"),
+    textRight(242, y, "F2", 9, "Requests"),
+    textRight(332, y, "F2", 9, "Credits"),
+    textRight(426, y, "F2", 9, "Rate"),
+    textRight(500, y, "F2", 9, "Cost"),
     textRight(562, y, "F2", 9, "Amount"),
     line(50, y - 8, 562, y - 8)
   ].join("\n");
@@ -75,6 +78,7 @@ function tableHeader(y: number) {
 function emptyLineItem() {
   return {
     id: "",
+    userId: null,
     description: "No invoiceable usage",
     requestCount: 0,
     inputTokens: 0,
@@ -82,6 +86,11 @@ function emptyLineItem() {
     cacheReadInputTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
+    creditCount: 0,
+    costPerCreditUsd: 0,
+    pricePerCreditUsd: 0,
+    markupRate: 0,
+    costCents: 0,
     amountCents: 0
   };
 }
@@ -120,6 +129,14 @@ function formatCurrency(amountCents: number) {
     style: "currency",
     currency: "USD"
   }).format(amountCents / 100);
+}
+
+function formatUsd(value: number) {
+  return `$${value.toFixed(6)}`;
+}
+
+function formatPercent(value: number) {
+  return `${(value * 100).toFixed(0)}%`;
 }
 
 function writePdf(objects: string[]) {

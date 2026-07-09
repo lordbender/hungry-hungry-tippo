@@ -125,6 +125,7 @@ export const OrganizationUsageResponseSchema = z.object({
 
 export const InvoiceLineItemSchema = z.object({
   id: z.string().uuid(),
+  userId: z.string().uuid().nullable(),
   description: z.string(),
   requestCount: z.number().int().nonnegative(),
   inputTokens: z.number().int().nonnegative(),
@@ -132,6 +133,11 @@ export const InvoiceLineItemSchema = z.object({
   cacheReadInputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative(),
+  creditCount: z.number().int().nonnegative(),
+  costPerCreditUsd: z.number().nonnegative(),
+  pricePerCreditUsd: z.number().nonnegative(),
+  markupRate: z.number().nonnegative(),
+  costCents: z.number().int().nonnegative(),
   amountCents: z.number().int().nonnegative()
 });
 
@@ -146,6 +152,11 @@ export const InvoiceSchema = z.object({
   requestCount: z.number().int().nonnegative(),
   failedRequestCount: z.number().int().nonnegative(),
   subtotalTokens: z.number().int().nonnegative(),
+  subtotalCredits: z.number().int().nonnegative(),
+  costPerCreditUsd: z.number().nonnegative(),
+  pricePerCreditUsd: z.number().nonnegative(),
+  markupRate: z.number().nonnegative(),
+  costCents: z.number().int().nonnegative(),
   amountCents: z.number().int().nonnegative(),
   createdAt: z.string().datetime(),
   reportGeneratedAt: z.string().datetime().nullable(),

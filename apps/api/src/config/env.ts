@@ -22,6 +22,8 @@ const EnvSchema = z.object({
     .default("true")
     .transform((value) => value === "true"),
   LOCAL_RESPONSE_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  BILLING_COST_PER_CREDIT_USD: z.coerce.number().nonnegative().default(0.000001),
+  BILLING_CREDIT_MARKUP_RATE: z.coerce.number().nonnegative().default(0.5),
   KEYCLOAK_AUTH_ENABLED: z
     .enum(["true", "false"])
     .default("true")

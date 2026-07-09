@@ -80,6 +80,10 @@ Claude prompt caching is enabled with explicit cache breakpoints on stable provi
 request prefixes. Local response caching stores exact-repeat prompt responses in
 Postgres for a short TTL and bypasses Claude entirely on a hit.
 
+Invoices treat one recorded token as one usage credit. Set
+`BILLING_COST_PER_CREDIT_USD` to your internal API cost per credit; invoices bill
+credits at `BILLING_CREDIT_MARKUP_RATE` above that cost, defaulting to 50%.
+
 ## Docker
 
 ```sh
