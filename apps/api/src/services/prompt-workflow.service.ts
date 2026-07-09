@@ -1,5 +1,6 @@
 import type { PromptRequest, PromptResponse } from "@hhh/contracts";
 import { env } from "../config/env.js";
+import { billingContextRepository } from "../repositories/billing-context.repository.js";
 import { promptLogRepository } from "../repositories/prompt-log.repository.js";
 import { promptResponseCacheRepository } from "../repositories/prompt-response-cache.repository.js";
 import { ragSourceRepository } from "../repositories/rag-source.repository.js";
@@ -7,13 +8,31 @@ import { claudeService } from "./claude.service.js";
 import { promptConductorService } from "./prompt-conductor.service.js";
 
 export class PromptWorkflowService {
-  async submitPrompt(request: PromptRequest, actor?: { subject: string; username?: string }): Promise<PromptResponse> {
+  async submitPrompt(
+    request: PromptRequest,
+    actor?: {
+      subject: string;
+      username?: string;
+      email?: string;
+      roles: string[];
+      organizationName?: string;
+      organizationSlug?: string;
+      billingEmail?: string;
+    }
+  ): Promise<PromptResponse> {
     const startedAt = Date.now();
     const plan = promptConductorService.plan(request);
+    const billingContext = await billingContextRepository.resolve({
+      actor,
+      clientSessionId: request.sessionId
+    });
     const promptLog = await promptLogRepository.create({
       prompt: request.prompt,
       augmentedPrompt: plan.augmentedPrompt,
       model: env.CLAUDE_MODEL,
+      organizationId: billingContext.organization.id,
+      userId: billingContext.user.id,
+      sessionId: billingContext.session.id,
       metadata: {
         workflow: {
           requestedMode: plan.requestedMode,
@@ -21,7 +40,13 @@ export class PromptWorkflowService {
           rationale: plan.rationale,
           webSearchMaxUses: plan.webSearch.enabled ? plan.webSearch.maxUses : 0,
           promptCache: plan.promptCache,
-          actor
+          actor,
+          billing: {
+            organizationId: billingContext.organization.id,
+            userId: billingContext.user.id,
+            sessionId: billingContext.session.id,
+            clientSessionId: billingContext.session.clientSessionId
+          }
         }
       }
     });

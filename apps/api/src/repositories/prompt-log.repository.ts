@@ -13,6 +13,9 @@ type PromptLogRow = {
   response: string | null;
   model: string;
   status: PromptLog["status"];
+  organization_id: string | null;
+  user_id: string | null;
+  session_id: string | null;
   latency_ms: number | null;
   input_tokens: number | null;
   cache_creation_input_tokens: number | null;
@@ -32,6 +35,9 @@ function toPromptLog(row: PromptLogRow): PromptLog {
     response: row.response,
     model: row.model,
     status: row.status,
+    organizationId: row.organization_id,
+    userId: row.user_id,
+    sessionId: row.session_id,
     latencyMs: row.latency_ms,
     inputTokens: row.input_tokens,
     cacheCreationInputTokens: row.cache_creation_input_tokens,
@@ -56,11 +62,28 @@ export class PromptLogRepository {
   async create(input: CreatePromptLogInput): Promise<PromptLog> {
     const { rows } = await pool.query<PromptLogRow>(
       `
-        insert into prompt_logs (prompt, augmented_prompt, model, status, metadata)
-        values ($1, $2, $3, 'pending', $4)
+        insert into prompt_logs (
+          prompt,
+          augmented_prompt,
+          model,
+          status,
+          organization_id,
+          user_id,
+          session_id,
+          metadata
+        )
+        values ($1, $2, $3, 'pending', $4, $5, $6, $7)
         returning *
       `,
-      [input.prompt, input.augmentedPrompt, input.model, input.metadata ?? {}]
+      [
+        input.prompt,
+        input.augmentedPrompt,
+        input.model,
+        input.organizationId ?? null,
+        input.userId ?? null,
+        input.sessionId ?? null,
+        input.metadata ?? {}
+      ]
     );
 
     return toPromptLog(requireRow(rows[0]));

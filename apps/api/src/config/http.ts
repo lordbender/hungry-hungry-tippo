@@ -4,6 +4,7 @@ import helmet from "helmet";
 import { env } from "./env.js";
 import { errorHandler } from "../middleware/error-handler.js";
 import { requestLogger } from "../middleware/request-logger.js";
+import { adminRouter } from "../routes/admin.routes.js";
 import { healthRouter } from "../routes/health.routes.js";
 import { promptRouter } from "../routes/prompt.routes.js";
 
@@ -20,6 +21,7 @@ export function createHttpServer() {
   app.use(requestLogger);
 
   app.use("/health", healthRouter);
+  app.use("/api/admin", adminRouter);
   app.use("/api/prompts", promptRouter);
 
   app.use(errorHandler);

@@ -1,21 +1,31 @@
 import { CircularProgress, Container, Stack, Typography } from "@mui/material";
+import { useState } from "react";
+import { AdminReportingPage } from "./admin/AdminReportingPage";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { LoginScreen } from "./auth/LoginScreen";
 import { AppShell } from "./layout/AppShell";
+import type { AppPage } from "./layout/HeaderNav";
 import { PromptWorkflowPage } from "./prompt/PromptWorkflowPage";
 
 export function App() {
+  const [activePage, setActivePage] = useState<AppPage>("prompt");
+
   return (
     <AuthProvider>
-      <AppShell>
-        <AuthenticatedApp />
+      <AppShell activePage={activePage} onNavigate={setActivePage}>
+        <AuthenticatedApp activePage={activePage} onNavigate={setActivePage} />
       </AppShell>
     </AuthProvider>
   );
 }
 
-function AuthenticatedApp() {
-  const { initialized, authenticated } = useAuth();
+function AuthenticatedApp({
+  activePage
+}: {
+  activePage: AppPage;
+  onNavigate: (page: AppPage) => void;
+}) {
+  const { initialized, authenticated, user } = useAuth();
 
   if (!initialized) {
     return (
@@ -28,5 +38,13 @@ function AuthenticatedApp() {
     );
   }
 
-  return authenticated ? <PromptWorkflowPage /> : <LoginScreen />;
+  if (!authenticated) {
+    return <LoginScreen />;
+  }
+
+  if (activePage === "admin" && user?.roles.includes("tippo-admin")) {
+    return <AdminReportingPage />;
+  }
+
+  return <PromptWorkflowPage />;
 }

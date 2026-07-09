@@ -6,6 +6,7 @@ export interface AuthUser {
   username: string;
   email?: string;
   name?: string;
+  roles: string[];
 }
 
 interface AuthContextValue {
@@ -94,6 +95,16 @@ function readUser(): AuthUser | null {
     subject: token.sub,
     username: token.preferred_username ?? token.email ?? token.sub,
     email: token.email,
-    name: token.name
+    name: token.name,
+    roles: readRoles(token.realm_access)
   };
+}
+
+function readRoles(realmAccess: unknown) {
+  if (!realmAccess || typeof realmAccess !== "object" || !("roles" in realmAccess)) {
+    return [];
+  }
+
+  const roles = realmAccess.roles;
+  return Array.isArray(roles) ? roles.filter((role): role is string => typeof role === "string") : [];
 }

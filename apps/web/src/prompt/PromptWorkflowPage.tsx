@@ -6,8 +6,11 @@ import { useAuth } from "../auth/AuthProvider";
 import { PromptForm } from "./PromptForm";
 import { PromptResult } from "./PromptResult";
 
+const sessionStorageKey = "hhh.promptSessionId";
+
 export function PromptWorkflowPage() {
   const { getAccessToken } = useAuth();
+  const [sessionId] = useState(readSessionId);
   const [prompt, setPrompt] = useState("");
   const [augmentationMode, setAugmentationMode] = useState<AugmentationMode>("auto");
   const [result, setResult] = useState<PromptResponse | null>(null);
@@ -27,7 +30,7 @@ export function PromptWorkflowPage() {
 
     try {
       const accessToken = await getAccessToken();
-      const response = await submitPrompt({ prompt, augmentationMode }, accessToken);
+      const response = await submitPrompt({ prompt, augmentationMode, sessionId }, accessToken);
       setResult(response);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Prompt submission failed.");
@@ -62,4 +65,19 @@ export function PromptWorkflowPage() {
       </Container>
     </Box>
   );
+}
+
+function readSessionId() {
+  const existing = window.sessionStorage.getItem(sessionStorageKey);
+  if (existing) {
+    return existing;
+  }
+
+  const next =
+    typeof window.crypto.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  window.sessionStorage.setItem(sessionStorageKey, next);
+  return next;
 }

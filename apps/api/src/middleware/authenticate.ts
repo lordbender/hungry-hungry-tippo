@@ -12,6 +12,9 @@ declare global {
         username?: string;
         email?: string;
         roles: string[];
+        organizationName?: string;
+        organizationSlug?: string;
+        billingEmail?: string;
       };
     }
   }
@@ -60,7 +63,10 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       subject: payload.sub ?? "",
       username: typeof payload.preferred_username === "string" ? payload.preferred_username : undefined,
       email: typeof payload.email === "string" ? payload.email : undefined,
-      roles: realmAccess?.roles ?? []
+      roles: realmAccess?.roles ?? [],
+      organizationName: stringClaim(payload, ["organization_name", "organization", "org_name", "org"]),
+      organizationSlug: stringClaim(payload, ["organization_slug", "organization_id", "org_id"]),
+      billingEmail: stringClaim(payload, ["billing_email"])
     };
 
     next();
@@ -72,4 +78,15 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       }
     });
   }
+}
+
+function stringClaim(payload: Record<string, unknown>, names: string[]) {
+  for (const name of names) {
+    const value = payload[name];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+
+  return undefined;
 }

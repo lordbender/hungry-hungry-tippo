@@ -7,6 +7,9 @@ export interface PromptLog {
   response: string | null;
   model: string;
   status: PromptLogStatus;
+  organizationId: string | null;
+  userId: string | null;
+  sessionId: string | null;
   latencyMs: number | null;
   inputTokens: number | null;
   cacheCreationInputTokens: number | null;
@@ -22,6 +25,9 @@ export interface CreatePromptLogInput {
   prompt: string;
   augmentedPrompt: string;
   model: string;
+  organizationId?: string;
+  userId?: string;
+  sessionId?: string;
   metadata?: Record<string, unknown>;
 }
 
