@@ -49,3 +49,4 @@ temp/
 # Docker/local volumes
 docker-data/
 postgres-data/
+playground/

@@ -188,6 +188,33 @@ export function createOpenApiDocument(baseUrl: string) {
             "403": { $ref: "#/components/responses/AdminRequired" }
           }
         }
+      },
+      "/api/admin/invoices/{invoiceId}/report.pdf": {
+        get: {
+          tags: ["Invoices"],
+          summary: "Download an invoice PDF report",
+          description:
+            "Generates and stores the invoice PDF on first request, then returns the stored PDF for repeatable downloads.",
+          security: [{ bearerAuth: [] }],
+          parameters: [{ $ref: "#/components/parameters/InvoiceId" }],
+          responses: {
+            "200": {
+              description: "Stored invoice PDF report.",
+              content: {
+                "application/pdf": {
+                  schema: {
+                    type: "string",
+                    format: "binary"
+                  }
+                }
+              }
+            },
+            "400": { $ref: "#/components/responses/ValidationError" },
+            "401": { $ref: "#/components/responses/Unauthenticated" },
+            "403": { $ref: "#/components/responses/AdminRequired" },
+            "404": { $ref: "#/components/responses/NotFound" }
+          }
+        }
       }
     },
     components: {
@@ -215,6 +242,12 @@ export function createOpenApiDocument(baseUrl: string) {
         },
         OrganizationId: {
           name: "organizationId",
+          in: "path",
+          required: true,
+          schema: { type: "string", format: "uuid" }
+        },
+        InvoiceId: {
+          name: "invoiceId",
           in: "path",
           required: true,
           schema: { type: "string", format: "uuid" }
@@ -545,6 +578,7 @@ export function createOpenApiDocument(baseUrl: string) {
             "subtotalTokens",
             "amountCents",
             "createdAt",
+            "reportGeneratedAt",
             "lineItems"
           ],
           properties: {
@@ -560,6 +594,7 @@ export function createOpenApiDocument(baseUrl: string) {
             subtotalTokens: { type: "integer", minimum: 0 },
             amountCents: { type: "integer", minimum: 0 },
             createdAt: { type: "string", format: "date-time" },
+            reportGeneratedAt: { type: ["string", "null"], format: "date-time" },
             lineItems: {
               type: "array",
               items: { $ref: "#/components/schemas/InvoiceLineItem" }

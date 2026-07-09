@@ -1,5 +1,6 @@
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import DescriptionIcon from "@mui/icons-material/Description";
+import DownloadIcon from "@mui/icons-material/Download";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import {
@@ -30,6 +31,7 @@ import type { AdminOverviewResponse, Invoice, Organization, OrganizationUsageRes
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createInvoice,
+  downloadInvoiceReport,
   getAdminOverview,
   getOrganizationUsage,
   listInvoices,
@@ -51,6 +53,7 @@ export function AdminReportingPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
   const period = useMemo(() => dateRangeToIso(startDate, endDate), [startDate, endDate]);
 
   const refresh = useCallback(async () => {
@@ -134,6 +137,23 @@ export function AdminReportingPage() {
     }
   }
 
+  async function onDownloadInvoiceReport(invoiceId: string) {
+    setDownloadingInvoiceId(invoiceId);
+    setError(null);
+
+    try {
+      const accessToken = await getAccessToken();
+      const report = await downloadInvoiceReport({ invoiceId, accessToken });
+      triggerBlobDownload(report.blob, report.filename);
+      const invoiceResult = await listInvoices(accessToken);
+      setInvoices(invoiceResult.invoices);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Invoice report could not be downloaded.");
+    } finally {
+      setDownloadingInvoiceId(null);
+    }
+  }
+
   return (
     <Box sx={{ py: { xs: 3, md: 5 } }}>
       <Container maxWidth="lg">
@@ -205,7 +225,13 @@ export function AdminReportingPage() {
                   onCreateInvoice={() => void onCreateInvoice()}
                 />
               ) : null}
-              {tab === "invoices" ? <InvoicesScreen invoices={invoices} /> : null}
+              {tab === "invoices" ? (
+                <InvoicesScreen
+                  invoices={invoices}
+                  downloadingInvoiceId={downloadingInvoiceId}
+                  onDownloadReport={(invoiceId) => void onDownloadInvoiceReport(invoiceId)}
+                />
+              ) : null}
             </Box>
           </Paper>
         </Stack>
@@ -428,7 +454,15 @@ function PromptTable({ usage }: { usage: OrganizationUsageResponse }) {
   );
 }
 
-function InvoicesScreen({ invoices }: { invoices: Invoice[] }) {
+function InvoicesScreen({
+  invoices,
+  downloadingInvoiceId,
+  onDownloadReport
+}: {
+  invoices: Invoice[];
+  downloadingInvoiceId: string | null;
+  onDownloadReport: (invoiceId: string) => void;
+}) {
   return (
     <TableContainer>
       <Table size="small" aria-label="Invoices">
@@ -440,6 +474,7 @@ function InvoicesScreen({ invoices }: { invoices: Invoice[] }) {
             <TableCell>Status</TableCell>
             <TableCell align="right">Requests</TableCell>
             <TableCell align="right">Tokens</TableCell>
+            <TableCell align="right">Report</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -453,11 +488,21 @@ function InvoicesScreen({ invoices }: { invoices: Invoice[] }) {
               <TableCell>{invoice.status}</TableCell>
               <TableCell align="right">{formatNumber(invoice.requestCount)}</TableCell>
               <TableCell align="right">{formatNumber(invoice.subtotalTokens)}</TableCell>
+              <TableCell align="right">
+                <Button
+                  size="small"
+                  startIcon={<DownloadIcon />}
+                  disabled={downloadingInvoiceId === invoice.id}
+                  onClick={() => onDownloadReport(invoice.id)}
+                >
+                  PDF
+                </Button>
+              </TableCell>
             </TableRow>
           ))}
           {invoices.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6}>No invoices have been created.</TableCell>
+              <TableCell colSpan={7}>No invoices have been created.</TableCell>
             </TableRow>
           ) : null}
         </TableBody>
@@ -510,4 +555,15 @@ function formatDate(value: string) {
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(href);
 }

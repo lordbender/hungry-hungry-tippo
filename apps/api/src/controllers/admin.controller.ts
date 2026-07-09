@@ -3,6 +3,7 @@ import { AdminDateRangeQuerySchema, CreateInvoiceRequestSchema } from "@hhh/cont
 import { AppError } from "../errors/app-error.js";
 import { billingContextRepository } from "../repositories/billing-context.repository.js";
 import { reportingRepository } from "../repositories/reporting.repository.js";
+import { generateInvoicePdf } from "../services/invoice-pdf.service.js";
 
 function parseDateRange(query: Request["query"]) {
   const parsed = AdminDateRangeQuerySchema.parse({
@@ -69,4 +70,41 @@ export async function createInvoice(req: Request, res: Response) {
   });
 
   res.status(201).json(invoice);
+}
+
+export async function downloadInvoiceReport(req: Request, res: Response) {
+  const { invoiceId } = req.params;
+
+  if (!invoiceId) {
+    throw new AppError("INVOICE_ID_REQUIRED", "Invoice ID is required.", 400);
+  }
+
+  const storedReport = await reportingRepository.getInvoiceReport(invoiceId);
+  const report = storedReport ?? (await createAndStoreInvoiceReport(invoiceId));
+
+  res.setHeader("Content-Type", report.contentType);
+  res.setHeader("Content-Length", report.content.byteLength);
+  res.setHeader("Content-Disposition", `attachment; filename="${report.filename}"`);
+  res.setHeader("Cache-Control", "private, max-age=0, must-revalidate");
+  res.send(report.content);
+}
+
+async function createAndStoreInvoiceReport(invoiceId: string) {
+  const invoice = await reportingRepository.getInvoice(invoiceId);
+
+  if (!invoice) {
+    throw new AppError("INVOICE_NOT_FOUND", "Invoice was not found.", 404);
+  }
+
+  const content = generateInvoicePdf(invoice);
+  return reportingRepository.storeInvoiceReport({
+    invoiceId,
+    filename: `${safeFilename(invoice.invoiceNumber)}.pdf`,
+    contentType: "application/pdf",
+    content
+  });
+}
+
+function safeFilename(value: string) {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, "-");
 }

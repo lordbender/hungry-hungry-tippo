@@ -77,6 +77,7 @@ type InvoiceRow = {
   subtotal_tokens: number;
   amount_cents: number;
   created_at: Date;
+  report_generated_at: Date | null;
 };
 
 type InvoiceLineItemRow = {
@@ -90,6 +91,22 @@ type InvoiceLineItemRow = {
   output_tokens: number;
   total_tokens: number;
   amount_cents: number;
+};
+
+export type InvoiceReport = {
+  invoiceId: string;
+  filename: string;
+  contentType: string;
+  content: Buffer;
+  generatedAt: Date;
+};
+
+type InvoiceReportRow = {
+  invoice_id: string;
+  filename: string;
+  content_type: string;
+  content: Buffer;
+  generated_at: Date;
 };
 
 function summarySelect(alias = "pl") {
@@ -164,6 +181,7 @@ function toInvoice(row: InvoiceRow, lineItems: InvoiceLineItemRow[]): Invoice {
     subtotalTokens: row.subtotal_tokens,
     amountCents: row.amount_cents,
     createdAt: toIso(row.created_at),
+    reportGeneratedAt: row.report_generated_at ? toIso(row.report_generated_at) : null,
     lineItems: lineItems
       .filter((line) => line.invoice_id === row.id)
       .map((line) => ({
@@ -412,6 +430,7 @@ export class ReportingRepository {
             failed_request_count,
             subtotal_tokens,
             amount_cents,
+            null::timestamptz as report_generated_at,
             created_at
         `,
         [
@@ -512,9 +531,11 @@ export class ReportingRepository {
           invoices.failed_request_count,
           invoices.subtotal_tokens,
           invoices.amount_cents,
-          invoices.created_at
+          invoices.created_at,
+          invoice_reports.generated_at as report_generated_at
         from invoices
         join organizations on organizations.id = invoices.organization_id
+        left join invoice_reports on invoice_reports.invoice_id = invoices.id
         order by invoices.created_at desc
         limit 100
       `
@@ -547,10 +568,120 @@ export class ReportingRepository {
     return invoices.rows.map((invoice) => toInvoice(invoice, lineItems.rows));
   }
 
+  async getInvoice(invoiceId: string): Promise<Invoice | null> {
+    const invoices = await pool.query<InvoiceRow>(
+      `
+        select
+          invoices.id,
+          invoices.invoice_number,
+          invoices.organization_id,
+          organizations.name as organization_name,
+          invoices.period_start,
+          invoices.period_end,
+          invoices.status,
+          invoices.request_count,
+          invoices.failed_request_count,
+          invoices.subtotal_tokens,
+          invoices.amount_cents,
+          invoices.created_at,
+          invoice_reports.generated_at as report_generated_at
+        from invoices
+        join organizations on organizations.id = invoices.organization_id
+        left join invoice_reports on invoice_reports.invoice_id = invoices.id
+        where invoices.id = $1
+      `,
+      [invoiceId]
+    );
+
+    const invoice = invoices.rows[0];
+    if (!invoice) {
+      return null;
+    }
+
+    const lineItems = await this.listInvoiceLineItems([invoice.id]);
+    return toInvoice(invoice, lineItems);
+  }
+
+  async getInvoiceReport(invoiceId: string): Promise<InvoiceReport | null> {
+    const { rows } = await pool.query<InvoiceReportRow>(
+      `
+        select invoice_id, filename, content_type, content, generated_at
+        from invoice_reports
+        where invoice_id = $1
+      `,
+      [invoiceId]
+    );
+
+    return rows[0] ? toInvoiceReport(rows[0]) : null;
+  }
+
+  async storeInvoiceReport(input: {
+    invoiceId: string;
+    filename: string;
+    contentType: string;
+    content: Buffer;
+  }): Promise<InvoiceReport> {
+    const { rows } = await pool.query<InvoiceReportRow>(
+      `
+        insert into invoice_reports (invoice_id, filename, content_type, content)
+        values ($1, $2, $3, $4)
+        on conflict (invoice_id) do update
+        set filename = invoice_reports.filename
+        returning invoice_id, filename, content_type, content, generated_at
+      `,
+      [input.invoiceId, input.filename, input.contentType, input.content]
+    );
+
+    const report = rows[0];
+    if (!report) {
+      throw new Error("Invoice report was not stored.");
+    }
+
+    return toInvoiceReport(report);
+  }
+
   private createInvoiceNumber() {
     const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
     return `INV-${stamp}-${randomUUID().slice(0, 8).toUpperCase()}`;
   }
+
+  private async listInvoiceLineItems(invoiceIds: string[]): Promise<InvoiceLineItemRow[]> {
+    if (invoiceIds.length === 0) {
+      return [];
+    }
+
+    const { rows } = await pool.query<InvoiceLineItemRow>(
+      `
+        select
+          id,
+          invoice_id,
+          description,
+          request_count,
+          input_tokens,
+          cache_creation_input_tokens,
+          cache_read_input_tokens,
+          output_tokens,
+          total_tokens,
+          amount_cents
+        from invoice_line_items
+        where invoice_id = any($1::uuid[])
+        order by description asc
+      `,
+      [invoiceIds]
+    );
+
+    return rows;
+  }
 }
 
 export const reportingRepository = new ReportingRepository();
+
+function toInvoiceReport(row: InvoiceReportRow): InvoiceReport {
+  return {
+    invoiceId: row.invoice_id,
+    filename: row.filename,
+    contentType: row.content_type,
+    content: row.content,
+    generatedAt: row.generated_at
+  };
+}

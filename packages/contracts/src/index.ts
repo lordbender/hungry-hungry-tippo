@@ -148,6 +148,7 @@ export const InvoiceSchema = z.object({
   subtotalTokens: z.number().int().nonnegative(),
   amountCents: z.number().int().nonnegative(),
   createdAt: z.string().datetime(),
+  reportGeneratedAt: z.string().datetime().nullable(),
   lineItems: z.array(InvoiceLineItemSchema)
 });
 

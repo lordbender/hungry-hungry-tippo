@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   createInvoice,
+  downloadInvoiceReport,
   getOrganizationUsage,
   getOverview,
   listInvoices,
@@ -19,3 +20,4 @@ adminRouter.get("/reports/overview", asyncHandler(getOverview));
 adminRouter.get("/reports/organizations/:organizationId", asyncHandler(getOrganizationUsage));
 adminRouter.get("/invoices", asyncHandler(listInvoices));
 adminRouter.post("/invoices", asyncHandler(createInvoice));
+adminRouter.get("/invoices/:invoiceId/report.pdf", asyncHandler(downloadInvoiceReport));

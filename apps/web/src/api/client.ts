@@ -80,6 +80,28 @@ export async function createInvoice(request: CreateInvoiceRequest, accessToken: 
   });
 }
 
+export async function downloadInvoiceReport(input: {
+  invoiceId: string;
+  accessToken: string;
+}): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(`${apiBaseUrl}/api/admin/invoices/${input.invoiceId}/report.pdf`, {
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`
+    }
+  });
+
+  if (!response.ok) {
+    const payload: unknown = await response.json().catch(() => null);
+    const parsed = ApiErrorResponseSchema.safeParse(payload);
+    throw new Error(parsed.success ? parsed.data.error.message : "Invoice report download failed.");
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: readFilename(response.headers.get("content-disposition")) ?? "invoice-report.pdf"
+  };
+}
+
 async function requestJson<T>(
   path: string,
   accessToken: string,
@@ -103,4 +125,9 @@ async function requestJson<T>(
   }
 
   return schema.parse(payload);
+}
+
+function readFilename(contentDisposition: string | null) {
+  const match = contentDisposition?.match(/filename="([^"]+)"/i);
+  return match?.[1];
 }
