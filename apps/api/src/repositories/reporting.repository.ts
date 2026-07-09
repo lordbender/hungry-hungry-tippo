@@ -6,7 +6,6 @@ import type {
   OrganizationUsageResponse,
   UsageSummary
 } from "@hhh/contracts";
-import { env } from "../config/env.js";
 import { pool } from "../database/pool.js";
 
 type UsageSummaryRow = {
@@ -70,6 +69,9 @@ type InvoiceRow = {
   invoice_number: string;
   organization_id: string;
   organization_name: string;
+  pricing_plan_name: string | null;
+  pricing_plan_version: number | null;
+  currency: string;
   period_start: Date;
   period_end: Date;
   status: "draft" | "finalized" | "void";
@@ -90,6 +92,11 @@ type InvoiceLineItemRow = {
   id: string;
   invoice_id: string;
   user_id: string | null;
+  module_id: string | null;
+  module_key: string | null;
+  module_name: string | null;
+  pricing_rate_id: string | null;
+  unit_name: string;
   description: string;
   request_count: number;
   input_tokens: number;
@@ -189,6 +196,9 @@ function toInvoice(row: InvoiceRow, lineItems: InvoiceLineItemRow[]): Invoice {
     invoiceNumber: row.invoice_number,
     organizationId: row.organization_id,
     organizationName: row.organization_name,
+    pricingPlanName: row.pricing_plan_name,
+    pricingPlanVersion: row.pricing_plan_version,
+    currency: row.currency,
     periodStart: toIso(row.period_start),
     periodEnd: toIso(row.period_end),
     status: row.status,
@@ -208,6 +218,11 @@ function toInvoice(row: InvoiceRow, lineItems: InvoiceLineItemRow[]): Invoice {
       .map((line) => ({
         id: line.id,
         userId: line.user_id,
+        moduleId: line.module_id,
+        moduleKey: line.module_key,
+        moduleName: line.module_name,
+        pricingRateId: line.pricing_rate_id,
+        unitName: line.unit_name,
         description: line.description,
         requestCount: line.request_count,
         inputTokens: line.input_tokens,
@@ -416,29 +431,144 @@ export class ReportingRepository {
     createdByUserId?: string;
   }): Promise<Invoice> {
     const invoiceNumber = this.createInvoiceNumber();
-    const costPerCreditUsd = env.BILLING_COST_PER_CREDIT_USD;
-    const markupRate = env.BILLING_CREDIT_MARKUP_RATE;
-    const pricePerCreditUsd = costPerCreditUsd * (1 + markupRate);
     const client = await pool.connect();
 
     try {
       await client.query("begin");
 
-      const totals = await client.query<UsageSummaryRow>(
+      const pricing = await client.query<{
+        plan_version_id: string;
+        pricing_plan_name: string;
+        pricing_plan_version: number;
+        currency: string;
+        pricing_snapshot: Record<string, unknown>;
+      }>(
         `
-          select ${summarySelect("pl")}
-          from prompt_logs pl
-          where pl.organization_id = $1 and pl.created_at >= $2 and pl.created_at < $3
+          with selected_profile as (
+            insert into organization_billing_profiles (organization_id, plan_version_id)
+            select $1, ppv.id
+            from pricing_plan_versions ppv
+            join pricing_plans pp on pp.id = ppv.plan_id
+            where pp.plan_key = 'production-standard'
+              and ppv.status = 'active'
+              and ppv.effective_at <= $2
+              and (ppv.retired_at is null or ppv.retired_at > $2)
+            order by ppv.effective_at desc, ppv.version desc
+            limit 1
+            on conflict (organization_id) do update
+            set updated_at = organization_billing_profiles.updated_at
+            returning plan_version_id
+          ),
+          plan_context as (
+            select
+              ppv.id as plan_version_id,
+              pp.name as pricing_plan_name,
+              ppv.version as pricing_plan_version,
+              pp.currency,
+              jsonb_build_object(
+                'planKey', pp.plan_key,
+                'planName', pp.name,
+                'planVersion', ppv.version,
+                'currency', pp.currency,
+                'effectiveAt', ppv.effective_at,
+                'costComponents', coalesce((
+                  select jsonb_agg(
+                    jsonb_build_object(
+                      'componentKey', pcc.component_key,
+                      'name', pcc.name,
+                      'category', pcc.category,
+                      'monthlyCostCents', pcc.monthly_cost_cents,
+                      'unitCostUsd', pcc.unit_cost_usd,
+                      'allocationMethod', pcc.allocation_method
+                    )
+                    order by pcc.category, pcc.component_key
+                  )
+                  from pricing_cost_components pcc
+                  where pcc.plan_version_id = ppv.id
+                ), '[]'::jsonb),
+                'rates', coalesce((
+                  select jsonb_agg(
+                    jsonb_build_object(
+                      'moduleKey', bm.module_key,
+                      'moduleName', bm.name,
+                      'unitName', pr.unit_name,
+                      'costPerUnitUsd', pr.cost_per_unit_usd,
+                      'markupRate', pr.markup_rate,
+                      'pricePerUnitUsd', pr.price_per_unit_usd
+                    )
+                    order by bm.module_key, pr.unit_name
+                  )
+                  from pricing_rates pr
+                  join billing_modules bm on bm.id = pr.module_id
+                  where pr.plan_version_id = ppv.id
+                ), '[]'::jsonb)
+              ) as pricing_snapshot
+            from selected_profile sp
+            join pricing_plan_versions ppv on ppv.id = sp.plan_version_id
+            join pricing_plans pp on pp.id = ppv.plan_id
+          )
+          select *
+          from plan_context
+        `,
+        [input.organizationId, input.periodStart]
+      );
+
+      const pricingRow = pricing.rows[0];
+      if (!pricingRow) {
+        throw new Error("No active pricing plan is configured.");
+      }
+
+      const totals = await client.query<{
+        request_count: number;
+        failed_request_count: number;
+        subtotal_tokens: number;
+        subtotal_credits: number;
+        cost_cents: number;
+        amount_cents: number;
+      }>(
+        `
+          with prompt_totals as (
+            select
+              count(distinct pl.id)::int as request_count,
+              count(distinct pl.id) filter (where pl.status = 'failed')::int as failed_request_count
+            from prompt_logs pl
+            where pl.organization_id = $1
+              and pl.created_at >= $2
+              and pl.created_at < $3
+          ),
+          usage_totals as (
+            select
+              coalesce(sum(mue.total_tokens), 0)::int as subtotal_tokens,
+              coalesce(sum(mue.unit_count), 0)::int as subtotal_credits,
+              coalesce(sum(mue.cost_cents), 0)::int as cost_cents,
+              coalesce(sum(mue.amount_cents), 0)::int as amount_cents
+            from module_usage_events mue
+            where mue.organization_id = $1
+              and mue.occurred_at >= $2
+              and mue.occurred_at < $3
+          )
+          select *
+          from prompt_totals
+          cross join usage_totals
         `,
         [input.organizationId, input.periodStart, input.periodEnd]
       );
-      const summary = totals.rows[0] ? toSummary(totals.rows[0]) : emptySummary();
+
+      const summary = totals.rows[0] ?? {
+        request_count: 0,
+        failed_request_count: 0,
+        subtotal_tokens: 0,
+        subtotal_credits: 0,
+        cost_cents: 0,
+        amount_cents: 0
+      };
 
       const invoice = await client.query<InvoiceRow>(
         `
           insert into invoices (
             invoice_number,
             organization_id,
+            plan_version_id,
             period_start,
             period_end,
             request_count,
@@ -450,14 +580,18 @@ export class ReportingRepository {
             markup_rate,
             cost_cents,
             amount_cents,
+            pricing_snapshot,
             created_by_user_id
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, 0, 0, $11)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, 0, 0, $10, $11, $12, $13)
           returning
             id,
             invoice_number,
             organization_id,
             (select name from organizations where id = invoices.organization_id) as organization_name,
+            $14::text as pricing_plan_name,
+            $15::int as pricing_plan_version,
+            $16::text as currency,
             period_start,
             period_end,
             status,
@@ -476,15 +610,20 @@ export class ReportingRepository {
         [
           invoiceNumber,
           input.organizationId,
+          pricingRow.plan_version_id,
           input.periodStart,
           input.periodEnd,
-          summary.requestCount,
-          summary.failedRequestCount,
-          summary.totalTokens,
-          costPerCreditUsd,
-          pricePerCreditUsd,
-          markupRate,
-          input.createdByUserId ?? null
+          summary.request_count,
+          summary.failed_request_count,
+          summary.subtotal_tokens,
+          summary.subtotal_credits,
+          summary.cost_cents,
+          summary.amount_cents,
+          pricingRow.pricing_snapshot,
+          input.createdByUserId ?? null,
+          pricingRow.pricing_plan_name,
+          pricingRow.pricing_plan_version,
+          pricingRow.currency
         ]
       );
 
@@ -498,6 +637,9 @@ export class ReportingRepository {
           insert into invoice_line_items (
             invoice_id,
             user_id,
+            module_id,
+            pricing_rate_id,
+            unit_name,
             description,
             request_count,
             input_tokens,
@@ -506,129 +648,89 @@ export class ReportingRepository {
             output_tokens,
             total_tokens,
             credit_count,
-            cost_per_credit_usd,
-            price_per_credit_usd,
-            markup_rate,
-            cost_cents,
-            amount_cents
-          )
-          with user_usage as (
-            select
-              users.id as user_id,
-              users.username,
-              count(*)::int as request_count,
-              coalesce(sum(coalesce(pl.input_tokens, 0)), 0)::int as input_tokens,
-              coalesce(sum(coalesce(pl.cache_creation_input_tokens, 0)), 0)::int as cache_creation_input_tokens,
-              coalesce(sum(coalesce(pl.cache_read_input_tokens, 0)), 0)::int as cache_read_input_tokens,
-              coalesce(sum(coalesce(pl.output_tokens, 0)), 0)::int as output_tokens,
-              coalesce(sum(
-                coalesce(pl.input_tokens, 0) +
-                coalesce(pl.cache_creation_input_tokens, 0) +
-                coalesce(pl.cache_read_input_tokens, 0) +
-                coalesce(pl.output_tokens, 0)
-              ), 0)::int as credit_count
-            from prompt_logs pl
-            join app_users users on users.id = pl.user_id
-            where pl.organization_id = $2 and pl.created_at >= $3 and pl.created_at < $4
-            group by users.id, users.username
-          )
-          select
-            $1,
-            user_id,
-            'User usage: ' || username,
-            request_count,
-            input_tokens,
-            cache_creation_input_tokens,
-            cache_read_input_tokens,
-            output_tokens,
-            credit_count,
-            credit_count,
-            $5::numeric,
-            $6::numeric,
-            $7::numeric,
-            round(credit_count * $5::numeric * 100)::int,
-            round(credit_count * $6::numeric * 100)::int
-          from user_usage
-          order by username
-        `,
-        [
-          invoiceRow.id,
-          input.organizationId,
-          input.periodStart,
-          input.periodEnd,
-          costPerCreditUsd,
-          pricePerCreditUsd,
-          markupRate
-        ]
-      );
-
-      const refreshedInvoice = await client.query<InvoiceRow>(
-        `
-          update invoices
-          set cost_cents = coalesce(lines.cost_cents, 0),
-              amount_cents = coalesce(lines.amount_cents, 0),
-              updated_at = now()
-          from (
-            select
-              invoice_id,
-              sum(cost_cents)::int as cost_cents,
-              sum(amount_cents)::int as amount_cents
-            from invoice_line_items
-            where invoice_id = $1
-            group by invoice_id
-          ) lines
-          where invoices.id = $1
-          returning
-            id,
-            invoice_number,
-            organization_id,
-            (select name from organizations where id = invoices.organization_id) as organization_name,
-            period_start,
-            period_end,
-            status,
-            request_count,
-            failed_request_count,
-            subtotal_tokens,
-            subtotal_credits,
             cost_per_credit_usd,
             price_per_credit_usd,
             markup_rate,
             cost_cents,
             amount_cents,
-            null::timestamptz as report_generated_at,
-            created_at
-        `,
-        [invoiceRow.id]
-      );
-
-      const lineItems = await client.query<InvoiceLineItemRow>(
-        `
+            pricing_snapshot
+          )
+          with usage_lines as (
+            select
+              users.id as user_id,
+              users.username,
+              bm.id as module_id,
+              bm.module_key,
+              bm.name as module_name,
+              mue.pricing_rate_id,
+              mue.unit_name,
+              count(*)::int as request_count,
+              coalesce(sum(mue.input_tokens), 0)::int as input_tokens,
+              coalesce(sum(mue.cache_creation_input_tokens), 0)::int as cache_creation_input_tokens,
+              coalesce(sum(mue.cache_read_input_tokens), 0)::int as cache_read_input_tokens,
+              coalesce(sum(mue.output_tokens), 0)::int as output_tokens,
+              coalesce(sum(mue.total_tokens), 0)::int as total_tokens,
+              coalesce(sum(mue.unit_count), 0)::int as unit_count,
+              mue.cost_per_unit_usd,
+              mue.price_per_unit_usd,
+              mue.markup_rate,
+              coalesce(sum(mue.cost_cents), 0)::int as cost_cents,
+              coalesce(sum(mue.amount_cents), 0)::int as amount_cents
+            from module_usage_events mue
+            join app_users users on users.id = mue.user_id
+            join billing_modules bm on bm.id = mue.module_id
+            where mue.organization_id = $2
+              and mue.occurred_at >= $3
+              and mue.occurred_at < $4
+            group by
+              users.id,
+              users.username,
+              bm.id,
+              bm.module_key,
+              bm.name,
+              mue.pricing_rate_id,
+              mue.unit_name,
+              mue.cost_per_unit_usd,
+              mue.price_per_unit_usd,
+              mue.markup_rate
+          )
           select
-            id,
-            invoice_id,
+            $1,
             user_id,
-            description,
+            module_id,
+            pricing_rate_id,
+            unit_name,
+            username || ' - ' || module_name || ' (' || unit_name || ')',
             request_count,
             input_tokens,
             cache_creation_input_tokens,
             cache_read_input_tokens,
             output_tokens,
             total_tokens,
-            credit_count,
-            cost_per_credit_usd,
-            price_per_credit_usd,
+            unit_count,
+            cost_per_unit_usd,
+            price_per_unit_usd,
             markup_rate,
             cost_cents,
-            amount_cents
-          from invoice_line_items
-          where invoice_id = $1
-          order by description asc
+            amount_cents,
+            jsonb_build_object(
+              'moduleKey', module_key,
+              'moduleName', module_name,
+              'unitName', unit_name,
+              'costPerUnitUsd', cost_per_unit_usd,
+              'pricePerUnitUsd', price_per_unit_usd,
+              'markupRate', markup_rate
+            )
+          from usage_lines
+          order by username, module_name, unit_name
         `,
-        [invoiceRow.id]
+        [invoiceRow.id, input.organizationId, input.periodStart, input.periodEnd]
       );
 
+      const lineItems = await this.listInvoiceLineItems([invoiceRow.id]);
+
       await client.query("commit");
-      return toInvoice(refreshedInvoice.rows[0] ?? invoiceRow, lineItems.rows);
+      return toInvoice(invoiceRow, lineItems);
     } catch (error) {
       await client.query("rollback");
       throw error;
@@ -645,6 +747,9 @@ export class ReportingRepository {
           invoices.invoice_number,
           invoices.organization_id,
           organizations.name as organization_name,
+          pricing_plans.name as pricing_plan_name,
+          pricing_plan_versions.version as pricing_plan_version,
+          coalesce(pricing_plans.currency, 'USD') as currency,
           invoices.period_start,
           invoices.period_end,
           invoices.status,
@@ -661,6 +766,8 @@ export class ReportingRepository {
           invoice_reports.generated_at as report_generated_at
         from invoices
         join organizations on organizations.id = invoices.organization_id
+        left join pricing_plan_versions on pricing_plan_versions.id = invoices.plan_version_id
+        left join pricing_plans on pricing_plans.id = pricing_plan_versions.plan_id
         left join invoice_reports on invoice_reports.invoice_id = invoices.id
         order by invoices.created_at desc
         limit 100
@@ -684,6 +791,9 @@ export class ReportingRepository {
           invoices.invoice_number,
           invoices.organization_id,
           organizations.name as organization_name,
+          pricing_plans.name as pricing_plan_name,
+          pricing_plan_versions.version as pricing_plan_version,
+          coalesce(pricing_plans.currency, 'USD') as currency,
           invoices.period_start,
           invoices.period_end,
           invoices.status,
@@ -700,6 +810,8 @@ export class ReportingRepository {
           invoice_reports.generated_at as report_generated_at
         from invoices
         join organizations on organizations.id = invoices.organization_id
+        left join pricing_plan_versions on pricing_plan_versions.id = invoices.plan_version_id
+        left join pricing_plans on pricing_plans.id = pricing_plan_versions.plan_id
         left join invoice_reports on invoice_reports.invoice_id = invoices.id
         where invoices.id = $1
       `,
@@ -766,25 +878,31 @@ export class ReportingRepository {
     const { rows } = await pool.query<InvoiceLineItemRow>(
       `
         select
-          id,
-          invoice_id,
-          user_id,
-          description,
-          request_count,
-          input_tokens,
-          cache_creation_input_tokens,
-          cache_read_input_tokens,
-          output_tokens,
-          total_tokens,
-          credit_count,
-          cost_per_credit_usd,
-          price_per_credit_usd,
-          markup_rate,
-          cost_cents,
-          amount_cents
+          invoice_line_items.id,
+          invoice_line_items.invoice_id,
+          invoice_line_items.user_id,
+          invoice_line_items.module_id,
+          billing_modules.module_key,
+          billing_modules.name as module_name,
+          invoice_line_items.pricing_rate_id,
+          invoice_line_items.unit_name,
+          invoice_line_items.description,
+          invoice_line_items.request_count,
+          invoice_line_items.input_tokens,
+          invoice_line_items.cache_creation_input_tokens,
+          invoice_line_items.cache_read_input_tokens,
+          invoice_line_items.output_tokens,
+          invoice_line_items.total_tokens,
+          invoice_line_items.credit_count,
+          invoice_line_items.cost_per_credit_usd,
+          invoice_line_items.price_per_credit_usd,
+          invoice_line_items.markup_rate,
+          invoice_line_items.cost_cents,
+          invoice_line_items.amount_cents
         from invoice_line_items
-        where invoice_id = any($1::uuid[])
-        order by description asc
+        left join billing_modules on billing_modules.id = invoice_line_items.module_id
+        where invoice_line_items.invoice_id = any($1::uuid[])
+        order by invoice_line_items.description asc
       `,
       [invoiceIds]
     );

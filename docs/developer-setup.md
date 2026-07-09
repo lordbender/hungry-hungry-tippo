@@ -24,9 +24,7 @@ From the repository root:
 ```sh
 cp .env.example .env
 npm install
-make db-up
-make migrate
-npm run dev
+make up
 ```
 
 The default local URLs are:
@@ -34,6 +32,7 @@ The default local URLs are:
 - Web app: `http://localhost:5173`
 - API: `http://localhost:3001`
 - API health: `http://localhost:3001/health`
+- Swagger/OpenAPI: `http://localhost:3001/api/docs`
 - PGAdmin: `http://localhost:5050`
 - Keycloak: `http://localhost:8081`
 
@@ -71,6 +70,19 @@ Connection string: postgres://tippo:tippo@localhost:5432/tippo
 Relational data currently includes tables such as:
 
 - `prompt_logs`
+- `organizations`
+- `app_users`
+- `prompt_sessions`
+- `billing_modules`
+- `pricing_plans`
+- `pricing_plan_versions`
+- `pricing_cost_components`
+- `pricing_rates`
+- `organization_billing_profiles`
+- `module_usage_events`
+- `invoices`
+- `invoice_line_items`
+- `invoice_reports`
 - `schema_migrations`
 
 Vector/RAG data currently includes:
@@ -216,11 +228,45 @@ make pgadmin-up    # start Postgres and PGAdmin
 make keycloak-up   # start local Keycloak and its database
 make migrate       # apply database migrations
 make dev           # run API and web app in dev mode
+make up            # build and run the persistent Docker stack detached
 make typecheck     # run TypeScript checks
 make build         # production build
+make test          # run typecheck and focused Node tests
 make logs          # follow all Docker Compose logs
 make down          # stop Compose services
 ```
+
+`make up` runs Docker Compose in detached mode. Stopping log output with Ctrl-C
+does not stop containers. Data persists in named Docker volumes unless you run
+`docker compose down -v`.
+
+## Billing and Pricing Inspection
+
+Pricing is seeded by migrations, not environment variables. Inspect these tables
+when debugging invoice math:
+
+```sql
+select plan_key, name, status
+from pricing_plans;
+
+select bm.module_key, pr.unit_name, pr.cost_per_unit_usd, pr.markup_rate, pr.price_per_unit_usd
+from pricing_rates pr
+join billing_modules bm on bm.id = pr.module_id
+join pricing_plan_versions ppv on ppv.id = pr.plan_version_id
+join pricing_plans pp on pp.id = ppv.plan_id
+where pp.plan_key = 'production-standard'
+order by bm.module_key, pr.unit_name;
+
+select bm.module_key, mue.unit_name, sum(mue.unit_count) as units, sum(mue.amount_cents) as amount_cents
+from module_usage_events mue
+join billing_modules bm on bm.id = mue.module_id
+group by bm.module_key, mue.unit_name
+order by bm.module_key, mue.unit_name;
+```
+
+Invoices aggregate `module_usage_events` by user, module, unit, and rate. PDF
+reports are stored in `invoice_reports` on first download so later downloads return
+the same bytes.
 
 ## Smoke Tests
 

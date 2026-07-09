@@ -1,6 +1,7 @@
 import type { PromptRequest, PromptResponse } from "@hhh/contracts";
 import { env } from "../config/env.js";
 import { billingContextRepository } from "../repositories/billing-context.repository.js";
+import { moduleUsageRepository } from "../repositories/module-usage.repository.js";
 import { promptLogRepository } from "../repositories/prompt-log.repository.js";
 import { promptResponseCacheRepository } from "../repositories/prompt-response-cache.repository.js";
 import { ragSourceRepository } from "../repositories/rag-source.repository.js";
@@ -52,6 +53,22 @@ export class PromptWorkflowService {
     });
 
     try {
+      await moduleUsageRepository.record({
+        organizationId: billingContext.organization.id,
+        userId: billingContext.user.id,
+        sessionId: billingContext.session.id,
+        promptLogId: promptLog.id,
+        moduleKey: "prompt_workflow",
+        unitName: "request",
+        unitCount: 1,
+        bpmnProcessId: "prompt-workflow",
+        bpmnActivityId: "prompt-workflow:start",
+        metadata: {
+          requestedMode: plan.requestedMode,
+          appliedMode: plan.appliedMode
+        }
+      });
+
       const cached = await promptResponseCacheRepository.findFresh({
         prompt: request.prompt,
         plan
@@ -78,6 +95,21 @@ export class PromptWorkflowService {
               localCacheHit: true,
               promptCacheEnabled: env.CLAUDE_PROMPT_CACHE_ENABLED
             }
+          }
+        });
+
+        await moduleUsageRepository.record({
+          organizationId: billingContext.organization.id,
+          userId: billingContext.user.id,
+          sessionId: billingContext.session.id,
+          promptLogId: promptLog.id,
+          moduleKey: "local_response_cache",
+          unitName: "request",
+          unitCount: 1,
+          bpmnProcessId: "prompt-workflow",
+          bpmnActivityId: "prompt-workflow:cache-hit",
+          metadata: {
+            localCacheHit: true
           }
         });
 
@@ -124,6 +156,62 @@ export class PromptWorkflowService {
               cacheReadInputTokens: completion.cacheReadInputTokens
             }
           }
+        }
+      });
+
+      const totalCompletionTokens =
+        (completion.inputTokens ?? 0) +
+        (completion.cacheCreationInputTokens ?? 0) +
+        (completion.cacheReadInputTokens ?? 0) +
+        (completion.outputTokens ?? 0);
+
+      await moduleUsageRepository.record({
+        organizationId: billingContext.organization.id,
+        userId: billingContext.user.id,
+        sessionId: billingContext.session.id,
+        promptLogId: promptLog.id,
+        moduleKey: "claude_completion",
+        unitName: "credit",
+        unitCount: totalCompletionTokens,
+        inputTokens: completion.inputTokens,
+        cacheCreationInputTokens: completion.cacheCreationInputTokens,
+        cacheReadInputTokens: completion.cacheReadInputTokens,
+        outputTokens: completion.outputTokens,
+        bpmnProcessId: "prompt-workflow",
+        bpmnActivityId: "prompt-workflow:claude-completion",
+        metadata: {
+          model: completion.model
+        }
+      });
+
+      await moduleUsageRepository.record({
+        organizationId: billingContext.organization.id,
+        userId: billingContext.user.id,
+        sessionId: billingContext.session.id,
+        promptLogId: promptLog.id,
+        moduleKey: "web_search",
+        unitName: "request",
+        unitCount: completion.webSearchRequests,
+        bpmnProcessId: "prompt-workflow",
+        bpmnActivityId: "prompt-workflow:web-search",
+        metadata: {
+          citationCount: completion.citations.length
+        }
+      });
+
+      await moduleUsageRepository.record({
+        organizationId: billingContext.organization.id,
+        userId: billingContext.user.id,
+        sessionId: billingContext.session.id,
+        promptLogId: promptLog.id,
+        moduleKey: "rag_context",
+        unitName: "credit",
+        unitCount: ragUpdate.chunksCreated,
+        bpmnProcessId: "prompt-workflow",
+        bpmnActivityId: "prompt-workflow:rag-context",
+        metadata: {
+          documentsTouched: ragUpdate.documentsTouched,
+          chunksCreated: ragUpdate.chunksCreated
         }
       });
 

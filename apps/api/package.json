@@ -9,6 +9,7 @@
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/database/migrate.ts",
     "start": "node dist/server.js",
+    "test": "node --test test/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

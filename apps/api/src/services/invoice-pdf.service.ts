@@ -30,6 +30,13 @@ function buildContent(invoice: Invoice) {
     line(50, 700, 562, 700),
     text(50, 674, "F2", 11, "Billing Period"),
     text(50, 654, "F1", 10, `${formatDate(invoice.periodStart)} through ${formatDate(invoice.periodEnd)}`),
+    text(
+      50,
+      638,
+      "F1",
+      10,
+      `Pricing: ${invoice.pricingPlanName ?? "Legacy"}${invoice.pricingPlanVersion ? ` v${invoice.pricingPlanVersion}` : ""}`
+    ),
     text(290, 674, "F2", 11, "Summary"),
     text(290, 654, "F1", 10, `Requests: ${formatNumber(invoice.requestCount)}`),
     text(290, 638, "F1", 10, `Failed requests: ${formatNumber(invoice.failedRequestCount)}`),
@@ -79,6 +86,11 @@ function emptyLineItem() {
   return {
     id: "",
     userId: null,
+    moduleId: null,
+    moduleKey: null,
+    moduleName: null,
+    pricingRateId: null,
+    unitName: "credit",
     description: "No invoiceable usage",
     requestCount: 0,
     inputTokens: 0,

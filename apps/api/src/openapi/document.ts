@@ -47,7 +47,7 @@ export function createOpenApiDocument(baseUrl: string) {
           tags: ["Prompts"],
           summary: "Submit a prompt",
           description:
-            "Runs the prompt workflow, logs request usage, and records organization/user/session context.",
+            "Runs the prompt workflow, logs request usage, records organization/user/session context, and meters module usage for billing.",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -164,7 +164,7 @@ export function createOpenApiDocument(baseUrl: string) {
           tags: ["Invoices"],
           summary: "Create an invoice for an organization and period",
           description:
-            "Snapshots request and token usage into a draft invoice. Amounts are currently zero-rated placeholders.",
+            "Aggregates module usage events by user, module, unit, and rate into a draft invoice. The invoice snapshots the active pricing plan version, cost components, module rates, costs, and billed amount.",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -565,11 +565,16 @@ export function createOpenApiDocument(baseUrl: string) {
         },
         Invoice: {
           type: "object",
+          description:
+            "Organization-period invoice snapshot built from metered module usage events and the organization's active pricing plan version.",
           required: [
             "id",
             "invoiceNumber",
             "organizationId",
             "organizationName",
+            "pricingPlanName",
+            "pricingPlanVersion",
+            "currency",
             "periodStart",
             "periodEnd",
             "status",
@@ -591,6 +596,9 @@ export function createOpenApiDocument(baseUrl: string) {
             invoiceNumber: { type: "string" },
             organizationId: { type: "string", format: "uuid" },
             organizationName: { type: "string" },
+            pricingPlanName: { type: ["string", "null"] },
+            pricingPlanVersion: { type: ["integer", "null"], minimum: 1 },
+            currency: { type: "string" },
             periodStart: { type: "string", format: "date-time" },
             periodEnd: { type: "string", format: "date-time" },
             status: { type: "string", enum: ["draft", "finalized", "void"] },
@@ -613,9 +621,16 @@ export function createOpenApiDocument(baseUrl: string) {
         },
         InvoiceLineItem: {
           type: "object",
+          description:
+            "Invoice line grouped by user, billing module, unit, and pricing rate.",
           required: [
             "id",
             "userId",
+            "moduleId",
+            "moduleKey",
+            "moduleName",
+            "pricingRateId",
+            "unitName",
             "description",
             "requestCount",
             "inputTokens",
@@ -633,6 +648,11 @@ export function createOpenApiDocument(baseUrl: string) {
           properties: {
             id: { type: "string", format: "uuid" },
             userId: { type: ["string", "null"], format: "uuid" },
+            moduleId: { type: ["string", "null"], format: "uuid" },
+            moduleKey: { type: ["string", "null"] },
+            moduleName: { type: ["string", "null"] },
+            pricingRateId: { type: ["string", "null"], format: "uuid" },
+            unitName: { type: "string" },
             description: { type: "string" },
             requestCount: { type: "integer", minimum: 0 },
             inputTokens: { type: "integer", minimum: 0 },

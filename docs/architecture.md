@@ -26,7 +26,8 @@ packages/contracts
 
 postgres
   Prompt logs
-  Future RAG documents and chunks
+  RAG documents and chunks
+  Billing, pricing, module usage, invoices, and PDF reports
   pgvector extension
 ```
 
@@ -37,12 +38,14 @@ postgres
    - `prompt`
    - `augmentationMode`: `auto`, `direct`, or `web_search`
 3. The controller validates the request using shared contract schemas.
-4. `PromptWorkflowService` creates a pending prompt log.
-5. `PromptConductorService` plans how the prompt should be handled.
-6. `ClaudeService` calls Claude directly or with web search enabled.
-7. Web-search citations are persisted into the RAG tables as source documents and chunks.
-8. The prompt log is updated with the response, latency, token usage, and workflow metadata.
-9. The frontend displays the model response, workflow mode, search count, and citations.
+4. `PromptWorkflowService` resolves organization, user, and session context.
+5. `PromptWorkflowService` creates a pending prompt log.
+6. `PromptConductorService` plans how the prompt should be handled.
+7. Module usage is recorded for conductor, model, tool, RAG, and cache activities.
+8. `ClaudeService` calls Claude directly or with web search enabled.
+9. Web-search citations are persisted into the RAG tables as source documents and chunks.
+10. The prompt log is updated with the response, latency, token usage, and workflow metadata.
+11. The frontend displays the model response, workflow mode, search count, and citations.
 
 ## API Layering
 
@@ -75,6 +78,14 @@ Current tables:
 - `prompt_logs`: prompt, response, model, status, latency, token usage, errors, and metadata.
 - `rag_documents`: placeholder table for future source documents.
 - `rag_chunks`: placeholder table for future chunked text and embeddings.
+- `organizations`, `app_users`, `prompt_sessions`: tenant and actor context.
+- `billing_modules`, `pricing_plans`, `pricing_plan_versions`,
+  `pricing_cost_components`, `pricing_rates`: database-backed production pricing.
+- `organization_billing_profiles`: organization-to-plan assignment.
+- `module_usage_events`: append-only usage metering for prompt, tool, RAG, and
+  future BPMN modules.
+- `invoices`, `invoice_line_items`, `invoice_reports`: invoice snapshots and
+  repeatable PDF report storage.
 
 `pgvector` is enabled so pass 2 can add embedding search without changing the database platform.
 
@@ -136,6 +147,27 @@ Claude prompt caching only applies when the cacheable prefix meets Anthropic's m
 minimum token threshold. Short prompts may report zero cache write/read tokens even
 when cache controls are present.
 
+## Billing and Pricing Architecture
+
+Billing is driven by module usage events rather than by invoice-time token scans.
+Each workflow module emits usage with a module key, unit name, unit count, token
+counts where applicable, and optional BPMN process/activity identifiers. The
+metering layer looks up the organization's active pricing plan version and
+snapshots rate data onto the usage event.
+
+Invoices aggregate `module_usage_events` by organization, user, module, unit, and
+rate for a selected period. They snapshot the pricing plan, cost components,
+module rates, costs, markup, and billed amount so historical invoices remain
+stable when pricing changes later.
+
+The seeded `production-standard` plan includes cost components for API usage,
+hosting, operations, and engineering. Client-specific pricing can be introduced by
+creating a new pricing plan version and assigning it through
+`organization_billing_profiles`.
+
+See [billing-architecture.md](billing-architecture.md) for the detailed data model
+and BPMN/RAG extension pattern.
+
 ## Configuration
 
 Important environment settings:
@@ -192,7 +224,6 @@ Add repeatable evaluation runs using saved prompts and expected behavior:
 
 Before production, add:
 
-- Authentication and authorization.
 - Rate limiting.
 - Request IDs and structured logging.
 - Secret management outside `.env`.
@@ -201,6 +232,7 @@ Before production, add:
 - Background jobs for ingestion.
 - Cost controls for web search and model usage.
 - Data retention policy for prompts and responses.
+- Payment collection and invoice lifecycle states beyond draft/finalized/void.
 
 ## Architectural Principles
 

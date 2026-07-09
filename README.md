@@ -80,9 +80,12 @@ Claude prompt caching is enabled with explicit cache breakpoints on stable provi
 request prefixes. Local response caching stores exact-repeat prompt responses in
 Postgres for a short TTL and bypasses Claude entirely on a hit.
 
-Invoices treat one recorded token as one usage credit. Set
-`BILLING_COST_PER_CREDIT_USD` to your internal API cost per credit; invoices bill
-credits at `BILLING_CREDIT_MARKUP_RATE` above that cost, defaulting to 50%.
+Pricing is database-backed. Migrations seed a production pricing plan with
+versioned module rates and cost components for API usage, hosting, operations,
+and engineering. Module usage events snapshot the active rate at execution time;
+invoices aggregate those events by user and module for the selected period.
+See [docs/billing-architecture.md](docs/billing-architecture.md) for the billing
+data model and BPMN/RAG module metering pattern.
 
 ## Docker
 
@@ -91,7 +94,9 @@ cp .env.example .env
 make up
 ```
 
-Compose starts Postgres with `pgvector`, the API, and an nginx-served web build.
+Compose starts Postgres with `pgvector`, Keycloak, the API, and an nginx-served
+web build in detached mode. Data persists in named Docker volumes unless you run
+`docker compose down -v`.
 
 ## RAG Pass 2 Foundation
 

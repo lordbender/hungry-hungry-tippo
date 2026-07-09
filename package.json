@@ -12,6 +12,7 @@
     "dev": "npm run build -w @hhh/contracts && concurrently \"npm run dev -w @hhh/api\" \"npm run dev -w @hhh/web\"",
     "lint": "npm run lint --workspaces --if-present",
     "migrate": "npm run migrate -w @hhh/api",
+    "test": "npm run typecheck && npm run build -w @hhh/api && npm run test -w @hhh/api",
     "typecheck": "npm run build -w @hhh/contracts && npm run typecheck -w @hhh/api && npm run typecheck -w @hhh/web"
   },
   "devDependencies": {

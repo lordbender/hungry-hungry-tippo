@@ -470,6 +470,7 @@ function InvoicesScreen({
           <TableRow>
             <TableCell>Invoice</TableCell>
             <TableCell>Organization</TableCell>
+            <TableCell>Plan</TableCell>
             <TableCell>Period</TableCell>
             <TableCell>Status</TableCell>
             <TableCell align="right">Requests</TableCell>
@@ -485,6 +486,9 @@ function InvoicesScreen({
             <TableRow key={invoice.id}>
               <TableCell>{invoice.invoiceNumber}</TableCell>
               <TableCell>{invoice.organizationName}</TableCell>
+              <TableCell>
+                {invoice.pricingPlanName ? `${invoice.pricingPlanName} v${invoice.pricingPlanVersion}` : "Legacy"}
+              </TableCell>
               <TableCell>
                 {formatDate(invoice.periodStart)} - {formatDate(invoice.periodEnd)}
               </TableCell>
@@ -508,7 +512,7 @@ function InvoicesScreen({
           ))}
           {invoices.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={10}>No invoices have been created.</TableCell>
+              <TableCell colSpan={11}>No invoices have been created.</TableCell>
             </TableRow>
           ) : null}
         </TableBody>
