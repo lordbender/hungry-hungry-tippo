@@ -30,6 +30,8 @@ make dev
 ```
 
 The web app runs at `http://localhost:5173` and the API at `http://localhost:3001`.
+Swagger API docs are available at `http://localhost:3001/api/docs`, with the raw
+OpenAPI document at `http://localhost:3001/api/docs/openapi.json`.
 
 Set `ANTHROPIC_API_KEY` in `.env` before submitting prompts. The API creates a
 `prompt_logs` row before every Claude call and updates it with response, latency,
