@@ -62,6 +62,12 @@ It creates:
 The client is a public browser client using the standard authorization code flow
 with PKCE. Registration is disabled at the realm level.
 
+The realm import sets `sslRequired` to `none` for local development. Docker port
+forwarding can present Keycloak with non-local client IP addresses, which would
+otherwise trigger Keycloak's default HTTPS requirement even when the browser uses
+`http://localhost`. The Docker Keycloak service also applies the same setting on
+startup for existing local volumes.
+
 The imported redirect URI is `http://localhost:5173/*`. If Vite falls back to another
 port, stop the process occupying `5173` or add the alternate redirect URI in the
 Keycloak admin console.
@@ -98,6 +104,10 @@ Docker Compose uses the browser-facing issuer but an internal JWKS URI:
 Issuer: http://localhost:8081/realms/hungry-hungry-tippo
 JWKS URI: http://keycloak:8080/realms/hungry-hungry-tippo/protocol/openid-connect/certs
 ```
+
+The API service hardcodes the internal JWKS URI in `docker-compose.yml` so a host
+`.env` value for `KEYCLOAK_JWKS_URI` does not break token validation inside the
+container.
 
 This split is intentional. Browser tokens are issued with the external localhost
 issuer, while API containers can reach Keycloak by service name on the Compose
