@@ -2,6 +2,7 @@
   "realm": "hungry-hungry-tippo",
   "enabled": true,
   "displayName": "Hungry Hungry Tippo",
+  "sslRequired": "none",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,

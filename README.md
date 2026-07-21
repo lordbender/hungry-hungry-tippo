@@ -98,6 +98,22 @@ Compose starts Postgres with `pgvector`, Keycloak, the API, and an nginx-served
 web build in detached mode. Data persists in named Docker volumes unless you run
 `docker compose down -v`.
 
+The web app runs at `http://localhost:5173` and the API at `http://localhost:3001`.
+Swagger API docs are available at `http://localhost:3001/api/docs`, with the raw
+OpenAPI document at `http://localhost:3001/api/docs/openapi.json`.
+
+Local Keycloak defaults over HTTP:
+
+```text
+Keycloak: http://localhost:8081
+Admin console: http://localhost:8081/admin
+App admin: admin / admin
+```
+
+Docker port forwarding can make Keycloak see non-local client IPs, so the local
+Keycloak service disables realm SSL requirements for development. Do not reuse
+that setting outside local Docker.
+
 ## RAG Pass 2 Foundation
 
 The initial migration creates `rag_documents` and `rag_chunks` with a `vector(1536)`

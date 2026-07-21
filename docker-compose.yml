@@ -48,7 +48,12 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.4
     restart: unless-stopped
-    command: start-dev --import-realm --hostname=http://localhost:${KEYCLOAK_PORT:-8081} --hostname-strict=false
+    entrypoint: ["/bin/sh", "/opt/keycloak/bin/start-dev-local.sh"]
+    command:
+      - start-dev
+      - --import-realm
+      - --hostname=http://localhost:${KEYCLOAK_PORT:-8081}
+      - --hostname-strict=false
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
@@ -62,6 +67,7 @@ services:
       - "${KEYCLOAK_PORT:-8081}:8080"
     volumes:
       - ./infrastructure/keycloak/realm-import:/opt/keycloak/data/import:ro
+      - ./infrastructure/keycloak/start-dev-local.sh:/opt/keycloak/bin/start-dev-local.sh:ro
     depends_on:
       keycloak-db:
         condition: service_healthy
@@ -83,7 +89,7 @@ services:
       LOCAL_RESPONSE_CACHE_TTL_SECONDS: ${LOCAL_RESPONSE_CACHE_TTL_SECONDS:-300}
       KEYCLOAK_AUTH_ENABLED: ${KEYCLOAK_AUTH_ENABLED:-true}
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-http://localhost:8081/realms/hungry-hungry-tippo}
-      KEYCLOAK_JWKS_URI: ${KEYCLOAK_JWKS_URI:-http://keycloak:8080/realms/hungry-hungry-tippo/protocol/openid-connect/certs}
+      KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/hungry-hungry-tippo/protocol/openid-connect/certs
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-hungry-hungry-tippo-web}
       DATABASE_URL: postgres://${POSTGRES_USER:-tippo}:${POSTGRES_PASSWORD:-tippo}@postgres:5432/${POSTGRES_DB:-tippo}
       NODE_ENV: production
